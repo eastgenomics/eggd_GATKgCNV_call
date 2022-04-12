@@ -1,0 +1,200 @@
+{
+    "name": "GATKgCNV_call_v0.0.1_dev",
+    "title": "GATKgCNV_call_v0.0.1_dev",
+    "summary": "Dx wrapper to run the GATK germline CNV caller",
+    "dxapi": "1.0.0",
+    "version": "0.0.1",
+    "inputSpec": [
+        {
+        "name": "GATK_docker",
+        "label": "GATK docker image tar.gz",
+        "class": "file",
+        "optional": false,
+        "patterns": [ "*.tar", "*.tar.gz"],
+        "suggestions": [
+            {
+            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+            "path": "/app_assets/GATK/"
+            },
+            {
+            "project": "project-FzyfP204Z5qXBp6696jG5g10",
+            "path": "/apps/GATK/"
+            }
+        ]
+        },
+        {
+        "name": "bambis",
+        "label": "Bunch of sample.bam AND sample.bai files",
+        "class": "array:file",
+        "optional": false,
+        "patterns": ["*.bam","*.bai"],
+        "help": "Sample.bam AND sample.bai indexed bam files"
+        },
+        {
+        "name": "interval_list",
+        "label": "target intervals file",
+        "class": "file",
+        "optional": false,
+        "patterns": ["*.bed", "*.interval_list", "*.intervals"],
+        "help": "sorted in chromosome order, created in the 'prep' step"
+        },
+        {
+        "name": "annotation_tsv",
+        "label": "annotation for the intervals list",
+        "class": "file",
+        "optional": false,
+        "patterns": ["*.tsv"],
+        "help": "contains GC content, mappability and other annotation of target intervals"
+        },
+        {
+        "name": "exon_list",
+        "label": "exons BED file for annotation",
+        "class": "file",
+        "optional": true,
+        "patterns": ["*.bed", "*.tsv"],
+        "help": "List of exons for selected transcripts, sorted in chromosome order"
+        },
+        {
+        "name": "run_name",
+        "label": "Name of the run",
+        "class": "string",
+        "optional": true,
+        "help": "prefix for gCNV.bed and summary files"
+        },
+        {
+        "name": "toAnnotate",
+        "label": "Generate summary of CNV calls for the whole run?",
+        "class": "boolean",
+        "optional": true,
+        "default": false,
+        "help": "Whether to generate an annotated_CNV_summary.tsv and a CNV_counts file that summarise CNV calls across the run"
+        },
+        {
+        "name": "toVisualise",
+        "label": "Generate gCNV.bed file for visualisation in IGV?",
+        "class": "boolean",
+        "optional": true,
+        "default": false,
+        "help": "Whether to generate a gCNV.bed file that can visualise copy ratios across the run in IGV"
+        },
+        {
+        "name": "CollectReadCounts_args",
+        "label": "optional parameters for CollectReadCounts",
+        "class": "string",
+        "optional": true,
+        "default": "",
+        "help": "eg  '--format TSV'"
+        },
+        {
+        "name": "FilterIntervals_args",
+        "label": "optional parameters for FilterIntervals",
+        "class": "string",
+        "optional": true,
+        "default": " --minimum-gc-content 0.1 --maximum-gc-content 0.9 --minimum-mappability 0.9 --maximum-mappability 1.0 --low-count-filter-count-threshold 5 --low-count-filter-percentage-of-samples 90.0",
+        "help": "optional command line arguments for FilterIntervals"
+        },
+        {
+        "name": "DetermineGermlineContigPloidy_args",
+        "label": "optional parameters for DetermineGermlineContigPloidy",
+        "class": "string",
+        "optional": true,
+        "default": "",
+        "help": "optional command line arguments for DetermineGermlineContigPloidy"
+        },
+        {
+        "name": "GermlineCNVCaller_args",
+        "label": "optional parameters for GermlineCNVCaller",
+        "class": "string",
+        "optional": true,
+        "default": "",
+        "help": "optional command line arguments for GermlineCNVCaller"
+        },
+        {
+        "name": "PostprocessGermlineCNVCalls_args",
+        "label": "optional parameters for PostprocessGermlineCNVCalls",
+        "class": "string",
+        "optional": true,
+        "default": "",
+        "help": "optional command line arguments for PostprocessGermlineCNVCalls"
+        },
+        {
+        "name": "debug_fail_start",
+        "label": "Auto-fail the job at the start",
+        "class": "boolean",
+        "optional": true,
+        "default": false,
+        "help": "Automatically fail the job after inputs have been downloaded"
+        },
+        {
+        "name": "debug_fail_end",
+        "label": "Auto-fail the job at the end",
+        "class": "boolean",
+        "optional": true,
+        "default": false,
+        "help": "Automatically fail the job after all commands have finished"
+        },
+        {
+        "name": "prior_prob",
+        "label": "prior probability for contigs",
+        "class": "file",
+        "optional": true,
+        "patterns": ["*.tsv"]
+        }
+    ],
+    "outputSpec": [
+        {
+        "name": "result_files",
+        "label": "sample CNV vcfs, copy ratio files and run-level annotation and visualisation files",
+        "class": "array:file"
+        }
+    ],
+    "runSpec": {
+        "distribution": "Ubuntu",
+        "release": "20.04",
+        "version": "0",
+        "interpreter": "bash",
+        "file": "src/GATK_gCNVcaller.sh",
+        "timeoutPolicy": {
+        "*": {
+            "hours": 24
+        }
+        },
+        "assetDepends": [
+        {
+            "name": "htslib",
+            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+            "folder": "/app_assets/htslib/htslib_v1.14.0",
+            "version": "1.14.0"
+        },
+        {
+            "name": "bedtools",
+            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+            "folder": "/app_assets/bedtools/bedtools_v2.30.0",
+            "version": "2.30.0"
+        }
+        ]
+    },
+    "developers":[
+        "user-sophier",
+        "org-emee_1"
+    ],
+    "authorizedUsers": [
+        "org-emee_1"
+    ],
+    "access": {
+        "allProjects": "VIEW",
+        "project": "CONTRIBUTE",
+        "network": [
+        "*"
+        ]
+    },
+    "regionalOptions": {
+        "aws:eu-central-1": {
+        "systemRequirements": {
+            "*": {
+            "instanceType": "mem1_ssd1_v2_x8"
+            }
+        }
+        }
+    }
+}
