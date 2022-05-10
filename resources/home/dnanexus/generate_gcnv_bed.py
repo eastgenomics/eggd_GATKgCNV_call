@@ -1,16 +1,7 @@
 """
-    Script to generate bed file from a run of cnv calls and intervals list.
+Script to generate bed file from a run of cnv calls and intervals list.
 
-    Expected inputs:
-        - denoised copy ratio tsv files of samples to visualise
-        - run name prefix
-    Optional input:
-        - use '-s' to generate per sample bed files in addition to the run one
-
-    Requires bgzip and tabix to be installed and on path.
-
-    created: 211119 by Jethro Rainford
-    last modified: 220325 by Sophie Ratkai
+Requires bgzip and tabix to be installed and on path.
 """
 import argparse
 from pathlib import Path
@@ -34,7 +25,7 @@ def parse_args():
         '-s', '--per_sample', action='store_true',
         help=(
             'generate per sample bed file, with just the sample highlighted '
-            'and other sample names removed'
+            'and run level mean and std deviations added'
         )
     )
 
@@ -51,7 +42,7 @@ def parse_args():
     return args
 
 
-def generate_bed(args):
+def generate_copy_ratio_df(args):
     """
         Generates bed dataframe from multiple copy ratio files
 
@@ -105,10 +96,10 @@ def generate_bed(args):
     return copy_ratio_df
 
 
-def generate_per_sample_beds(copy_ratio_df):
+def generate_per_sample_copy_ratio_dfs(copy_ratio_df):
     """
-        Generates one dataframe / bed file per sample, with other samples
-        anonymised
+        Generates one dataframe / bed file per sample, with run level mean
+        and std deviations added
 
         Args:
             - copy_ratio_df (df): df of all copy ratios of all samples
@@ -190,14 +181,14 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
 def main():
 
     args = parse_args()
-    copy_ratio_df = generate_bed(args)
+    copy_ratio_df = generate_copy_ratio_df(args)
 
     # write output bed file
     write_outfile(copy_ratio_df, args.run, per_sample=False)
 
     if args.per_sample:
         # generating per sample bed files
-        per_sample_dfs = generate_per_sample_beds(copy_ratio_df)
+        per_sample_dfs = generate_per_sample_copy_ratio_dfs(copy_ratio_df)
 
         for sample in per_sample_dfs:
             sample_name = sample[0]
