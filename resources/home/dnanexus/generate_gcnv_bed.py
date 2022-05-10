@@ -20,9 +20,7 @@ import pandas as pd
 
 
 def parse_args():
-    """
-        Parse command line arguments
-    """
+    """Parse command line arguments"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

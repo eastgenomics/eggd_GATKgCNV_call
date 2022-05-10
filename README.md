@@ -17,7 +17,7 @@ Input files (preprocessed and intervals) come from the prepIntervals app and inp
 
 ## What data are required for this app to run?
 This app requires:
-* at least 30 sample.bam and sample.bai files from the same sequencing run (array of files)
+* at least 30 pairs of sample.bam and sample.bai files from the same sequencing run (array of files)
 * preprocessed.interval_list specifying the intervals where CNVs should be called (-iinterval_list)
 * a corresponding annotation.tsv that has GC content and optionally other information about each of the intervals in the list (-iannotation_tsv)
 * OPTIONAL to provide a prior probability.tsv for CNV calling (applet has a built-in default)

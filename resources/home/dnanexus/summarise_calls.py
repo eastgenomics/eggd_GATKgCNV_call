@@ -1,4 +1,3 @@
-#!/bin/Python3.8
 """
     Script to parse CNV vcf file and annotate each call with exon information.
 

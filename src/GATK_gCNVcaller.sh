@@ -21,6 +21,8 @@ main() {
     mark-section "Loading GATK Docker image"
     dx download "$GATK_docker" -o GATK.tar.gz
     docker load -i GATK.tar.gz
+
+    # Parse the image ID from the list of docker images
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
     export $CollectReadCounts_args
     export $PostprocessGermlineCNVCalls_args
@@ -98,7 +100,7 @@ main() {
     echo "Identifying excluded intervals from CNV calling on this run"
     bedtools intersect -v -a <(tail +88 inputs/beds/preprocessed.interval_list | sort) \
         -b <(tail +88 inputs/beds/filtered.interval_list | sort) > excluded_intervals.bed
-    wc -l excluded_intervals.bed
+    # wc -l excluded_intervals.bed
 
     # 2. Run DetermineGermlineContigPloidy:
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
@@ -197,12 +199,12 @@ main() {
     # cp -r inputs/gCNV-dir/CNV-calls ${outdir}/
 
     if $toAnnotate; then
+        mark-section "Annotating calls"
         # Download exons file (list of exon positions and transcript ID bed)
         if [[ ! -z $exon_list ]]; then
             echo "Exon annotation file is provided as '$exon_list_prefix'"
             dx download "$exon_list" -o inputs/beds/exon.list
 
-            mark-section "Annotating calls"
             # Annotate CNV calls with gene, transcript and exon number information
             # and calculate per run frequency of calls
             echo "Running the run-level annotation script"
@@ -215,10 +217,10 @@ main() {
     fi
 
     if $toVisualise; then
+        mark-section "Visualising calls"
         vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
         # Generate bed file from copy ratio files for viewing all samples in IGV
         echo "Generating gcnv bed files for all sample copy ratios"
-        mark-section "Visualising calls"
         denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
         python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
         --run "$run_name"
