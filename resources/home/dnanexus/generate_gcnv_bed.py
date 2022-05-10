@@ -155,7 +155,8 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
         Args:
             - copy_ratio_df (df): df of all copy ratios to write
             - prefix (str): prefix for naming output file
-            - per_sample (bool): controls writing header per sample or per run
+            - per_sample (bool): controls writing bed file header, if per sample the
+                mean tracks are added, else if per run clickToHighlight is enabled
     """
     outfile = "{}_copy_ratios.gcnv.bed".format(prefix)
 
