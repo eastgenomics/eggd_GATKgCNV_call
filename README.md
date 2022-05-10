@@ -1,11 +1,8 @@
-# eggd_GATKgCNV_call
-<!-- dx-header -->
 # GATK germline CNV caller (DNAnexus Platform App)
 
 Dx wrapper to run the GATK germlineCNVcaller, generate gCNV.bed file for copy ratio visualisation and summarise CNV calls across samples on a run.
 This is the source code for an app that runs on the DNAnexus Platform.
 
-<!-- Insert a description of your app here -->
 ## What does this app do?
 Calls copy number variants (CNV) from a minimum of 30 samples based on variation in read depth of exome sequencing data.
 
@@ -33,7 +30,7 @@ Parameters to calculate coverage, filter out low quality calls and call variants
 * (minimum and maximum segmental duplication of interval) - depending if annotation.tsv has this information
 
 ## What does this app output?
-* a pair of _intervals.vcf (genotype of every interval in the input bed) and _segments.vcf (adjacent intervals with same CNV status are merged) for each sample
+* a pair of _intervals.vcf (genotype of every interval in the input bed) and _segments.vcf (consecutive intervals with the same CNV status are merged) for each sample
 * a summary and statistics of all CNV calls in all samples on the run
 * gCNV.bed file for copy ratio visualisation in IGV.js
 
