@@ -45,7 +45,7 @@ def vcf2df(vcf_file):
 
 
 def ID2pos(row):
-    """Annotate each CNV call with overlapping exon information"""
+    """Split CNV ID from GATK to chrom, start, end position"""
     pos = row.ID.split('_')
     return pos[1], pos[2], pos[3], row.ID
 
