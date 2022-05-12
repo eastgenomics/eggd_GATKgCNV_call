@@ -35,7 +35,7 @@
         "label": "target intervals file",
         "class": "file",
         "optional": false,
-        "patterns": ["*.bed", "*.interval_list", "*.intervals"],
+        "patterns": ["*.interval_list"],
         "help": "sorted in chromosome order, created in the 'prep' step"
         },
         {
@@ -135,10 +135,11 @@
         },
         {
         "name": "prior_prob",
-        "label": "prior probability for contigs",
+        "label": "prior ploidy probability for contigs",
         "class": "file",
         "optional": true,
-        "patterns": ["*.tsv"]
+        "patterns": ["*.tsv"],
+        "help": "Probability of the copy number of the chromosomes"
         }
     ],
     "outputSpec": [
