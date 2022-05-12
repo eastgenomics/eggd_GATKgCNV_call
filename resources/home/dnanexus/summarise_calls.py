@@ -1,12 +1,10 @@
 """
-    Script to parse CNV vcf file and annotate each call with exon information.
+Script to parse CNV vcf file and annotate each call with exon information.
 
-    Expected inputs:
-        - folder of .vcf files
-        - filename of the exons.bed for annotation with expected columns
-            ["chrom", "start", "end", "gene", "transcript", "exon_num"]
-
-    Sophie Ratkai 220317
+Expected inputs:
+    - folder of .vcf files
+    - filename of the exons.bed for annotation with expected columns
+        ["chrom", "start", "end", "gene", "transcript", "exon_num"]
 """
 import os
 import sys
@@ -17,6 +15,7 @@ import pybedtools as bedtools
 
 
 def vcf2df(vcf_file):
+    """Parse calls from GATK CNV segments.vcf"""
     CNVcalls = pd.DataFrame()
 
     vcf_reader = vcf.Reader(open(vcf_file, 'r'))
@@ -28,8 +27,13 @@ def vcf2df(vcf_file):
         CNV_call['start'] = record.POS  # int
         CNV_call['end'] = record.INFO["END"]
         CNV_call['ID'] = record.ID  # str
+        # check that ALT has 1 value
+        if len(record.ALT) != 1:
+            sys.exit(-1)
+        # skip rows with no CNV
         if record.ALT[0] is None:
             continue
+        # parse whether CNV is a DEL or DUP
         CNV_call['CNV'] = str(record.ALT[0]).strip("<>")
 
         format_fields = record.FORMAT.split(':')  # GT:CN:NP:QA:QS:QSE:QSS
@@ -41,14 +45,13 @@ def vcf2df(vcf_file):
 
 
 def ID2pos(row):
+    """Annotate each CNV call with overlapping exon information"""
     pos = row.ID.split('_')
     return pos[1], pos[2], pos[3], row.ID
 
 
 def annotate(calls_df, exons_df):
-    """
-        Annotate each CNV call with overlapping exon information
-    """
+    """Annotate each CNV call with overlapping exon information"""
     calls_bed = bedtools.BedTool.from_dataframe(calls_df)
     exon_bed = bedtools.BedTool.from_dataframe(exons_df)
 
@@ -65,7 +68,7 @@ def annotate(calls_df, exons_df):
     # print(annotated_calls_df)
 
     calls = annotated_calls_df["call_ID"].unique().tolist()
-    genes = []  # list that will become the genes column in the dfexon
+    genes = []  # list that will become the genes column in the df
     transcripts = []
     exons = []  # list that will become the exons column in the df
     lengths = []
