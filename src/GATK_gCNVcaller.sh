@@ -95,8 +95,9 @@ main() {
         -O /data/beds/filtered.interval_list
 
     echo "Identifying excluded intervals from CNV calling on this run"
-    bedtools intersect -v -a <(tail +88 inputs/beds/preprocessed.interval_list | sort) \
-        -b <(tail +88 inputs/beds/filtered.interval_list | sort) > excluded_intervals.bed
+    grep -v "^@" inputs/beds/preprocessed.interval_list | bedtools sort > preprocessed.bed
+    grep -v "^@" inputs/beds/filtered.interval_list | bedtools sort > filtered.bed
+    bedtools intersect -v -a preprocessed.bed -b filtered.bed > excluded_intervals.bed
 
     # 2. Run DetermineGermlineContigPloidy:
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
