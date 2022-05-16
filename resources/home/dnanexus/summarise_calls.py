@@ -51,22 +51,29 @@ def ID2pos(row):
 
 
 def annotate(calls_df, exons_df):
-    """Annotate each CNV call with overlapping exon information"""
+    """Annotate each CNV call with overlapping exon information
+        Args: unique CNV calls and exon annotation df
+            calls_df with chrom, start, end, CNV_ID columns
+            exons_df with chrom, start, end, gene, transcript, exon_num columns
+        Returns:
+            df of annotations with transcript per row per CNV
+    """
     calls_bed = bedtools.BedTool.from_dataframe(calls_df)
     exon_bed = bedtools.BedTool.from_dataframe(exons_df)
 
     # Intersecting calls bed file with transcript_exon information
-    # requires 100% overlap on exon within call coordinates
+    # requires at least 1 bp overlap of exon and call coordinates
     calls_w_exons = calls_bed.intersect(exon_bed, loj=True)
     # convert pybedtools object to dataframe
     annotated_calls_df = calls_w_exons.to_dataframe(index_col=False,
         names=["call_chrom", "call_start", "call_end", "call_ID",
         "exon_chrom", "exon_start", "exon_end", "gene", "transcript", "exon"])
+
+    # calculate number of bases in exon, assuming 0-based BED file
     annotated_calls_df['exon_length'] = \
         annotated_calls_df['exon_end'] - annotated_calls_df['exon_start']
-    # print("annotated_calls_df")
-    # print(annotated_calls_df)
 
+    # Initialise placeholders for the output df columns
     calls = annotated_calls_df["call_ID"].unique().tolist()
     genes = []  # list that will become the genes column in the df
     transcripts = []
