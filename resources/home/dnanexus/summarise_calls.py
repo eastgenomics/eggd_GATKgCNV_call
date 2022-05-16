@@ -73,59 +73,45 @@ def annotate(calls_df, exons_df):
     annotated_calls_df['exon_length'] = \
         annotated_calls_df['exon_end'] - annotated_calls_df['exon_start']
 
+    unique_calls = annotated_calls_df["call_ID"].unique().tolist()
     # Initialise placeholders for the output df columns
-    calls = annotated_calls_df["call_ID"].unique().tolist()
+    calls = []  # list that will become the CNV calls column in the df
     genes = []  # list that will become the genes column in the df
-    transcripts = []
+    transcripts = []  # list that will become the tx column in the df
     exons = []  # list that will become the exons column in the df
-    lengths = []
+    lengths = []  # list that will become the lengths column in the df
 
-    for call in calls:  # Depending on the number of exon annotation and
+    for call in unique_calls:  # Depending on the number of exon annotation and
                         # whether there's annotation available at all:
         annotation_df = annotated_calls_df[annotated_calls_df["call_ID"] == call]
         annotation_df = annotation_df.reset_index(drop=True)
         # print("annotation_df for sample {}, call {}".format(
         #     calls_df["sample"][0], call))
         if len(annotation_df) == 1:  # call is a single exon
-            call_gene = annotation_df["gene"][0]
-            call_transcript = annotation_df["transcript"][0]
-            call_exon = annotation_df["exon"][0]
-            call_length = annotation_df["exon_length"][0]
+            calls.append(call)
+            genes.append(annotation_df["gene"][0])
+            transcripts.append(annotation_df["transcript"][0])
+            exons.append(annotation_df["exon"][0])
+            lengths.append(annotation_df["exon_length"][0])
         else:  # this call covers multiple exons
-            call_genes = annotation_df["gene"].unique().tolist()
-            if len(call_genes) == 1:  # call covers multiple exons in 1 gene
-                call_gene = call_genes[0]
-                call_transcript = annotation_df["transcript"].tolist()[0]
-                exon_nums = sorted(annotation_df["exon"].unique().tolist())
+            call_transcripts = annotation_df["transcript"].unique().tolist()
+            # call covers multiple exons in 1 or more transcripts
+            # assuming 1 gene per transcript
+            for tx in call_transcripts:
+                calls.append(call)
+                tx_annotation_df = annotation_df[
+                    annotation_df["transcript"] == tx]
+                genes.append(tx_annotation_df["gene"].tolist()[0])
+                transcripts.append(tx)
+
+                exon_nums = sorted(tx_annotation_df["exon"].unique().tolist())
                 start_exon = str(exon_nums[0])
                 end_exon = str(exon_nums[-1])
                 call_exon = "-".join([start_exon, end_exon])
-                call_length = sum(annotation_df['exon_length'].tolist())
-            else:  # this call covers multiple exons in multiple genes
-                call_gene = ', '.join(call_genes)
-                call_transcripts = annotation_df["transcript"].unique().tolist()
-                call_transcript = ', '.join(call_transcripts)
-                call_exons = []
-                exon_lengths = []
-                for transcript in call_transcripts:
-                    exon_annot_df = annotation_df[
-                        annotation_df['transcript'] == transcript][
-                            ['exon', 'exon_length']]
-                    exon_nums = sorted(exon_annot_df["exon"].unique().tolist())
-                    if len(exon_nums) == 1:
-                        call_exons.append(str(exon_nums[0]))
-                    else:
-                        start_exon = str(exon_nums[0])
-                        end_exon = str(exon_nums[-1])
-                        call_exons.append("-".join([start_exon, end_exon]))
-                    exon_lengths.append(exon_annot_df['exon_length'].sum())
-                call_exon = ', '.join(call_exons)
-                call_length = sum(exon_lengths)
+                exons.append(call_exon)
 
-        genes.append(call_gene)
-        transcripts.append(call_transcript)
-        exons.append(call_exon)
-        lengths.append(call_length)
+                call_length = sum(tx_annotation_df['exon_length'].tolist())
+                lengths.append(call_length)
 
     # create annotation dataframe
     CNV_annotation = pd.DataFrame.from_dict({"ID": calls, "gene": genes,
