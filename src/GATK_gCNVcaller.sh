@@ -9,8 +9,8 @@ set -e -x -o pipefail
 
 main() {
 
-    echo "Installing packages"
     mark-section "Installing packages"
+    echo "Installing packages"
     sudo dpkg -i sysstat*.deb
     sudo dpkg -i parallel*.deb
     cd packages
@@ -32,6 +32,7 @@ main() {
     mkdir inputs
 
     # Prior probabilities tsv
+    # file can be provided as input or a default is used bundled with the app
     if [[ ! -z $prior_prob ]]
     then
         echo "Prior prob file is provided as '$prior_prob'"
@@ -42,7 +43,7 @@ main() {
 
     cd inputs
     mkdir beds
-    mark-section "Downloading input files"
+    mark-section "Downloading interval files"
     # Intervals file (preprocessed bed from GATK_prep)
     dx download "$interval_list" -o beds/preprocessed.interval_list
     # Annotation tsv (from GATK_prep)
@@ -51,7 +52,7 @@ main() {
     mkdir bams
     cd bams
     ## Download all input bam and bai files
-    mark-section "Downloading input bam&bai files"
+    mark-section "Downloading input bam & bai files"
     for i in ${!bambis[@]}
     do
         dx download "${bambis[$i]}"
@@ -85,7 +86,7 @@ main() {
         batch_input+="--input /data/base_counts/${sample_file} "
     done
 
-    # C. Run FilterIntervals:
+    # 2. Run FilterIntervals:
     echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
     mark-section "FilterIntervals"
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk FilterIntervals \
@@ -99,7 +100,7 @@ main() {
     grep -v "^@" inputs/beds/filtered.interval_list | bedtools sort > filtered.bed
     bedtools intersect -v -a preprocessed.bed -b filtered.bed > excluded_intervals.bed
 
-    # 2. Run DetermineGermlineContigPloidy:
+    # 3. Run DetermineGermlineContigPloidy:
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
     # outputs a ploidy model and ploidy-calls for each sample
     echo "Running DetermineGermlineContigPloidy for the calculated basecounts"
@@ -113,7 +114,7 @@ main() {
         --output-prefix ploidy \
         -O /data/ploidy-dir
 
-    # 3. Run GermlineCNVCaller:
+    # 4. Run GermlineCNVCaller:
     # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
     # outputs a CNVcalling model and copy ratio files for each sample
     echo "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
@@ -129,7 +130,7 @@ main() {
         --output-prefix CNV \
         -O /data/gCNV-dir
 
-    # 4. Run PostprocessGermlineCNVCalls:
+    # 5. Run PostprocessGermlineCNVCalls:
     # takes CNV-model in, spits vcfs out
     echo "Running PostprocessGermlineCNVCalls"
     mark-section "PostprocessGermlineCNVCalls"
@@ -162,7 +163,7 @@ main() {
         --output-denoised-copy-ratios /data/vcfs/sample_{}_denoised_copy_ratios.tsv \
     ' ::: $(seq 0 1 $index)
 
-    # Rename output vcf files based on the sample they contain information about
+    # 6. Rename output vcf files based on the sample they contain information about
     find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs 8 ' \
         sample_file=$( basename {} ); file_name="${sample_file%_segments.vcf}"; \
         sample_name=$(bcftools view {} -h | tail -n 1 | cut -f 10 ); \
@@ -179,7 +180,7 @@ main() {
 
     mark-section "Visualising calls"
     vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
-    # Generate bed file from copy ratio files for viewing all samples in IGV
+    # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
     echo "Generating gcnv bed files for all sample copy ratios"
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
     python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
