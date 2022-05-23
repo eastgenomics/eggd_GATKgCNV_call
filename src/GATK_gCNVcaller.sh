@@ -177,24 +177,6 @@ main() {
     vcf_dir=out/result_files/CNV_vcfs && mkdir -p ${vcf_dir}
     summary_dir=out/result_files/CNV_summary && mkdir -p ${summary_dir}
 
-    if $toAnnotate; then
-        mark-section "Annotating calls"
-        # Download exons file (list of exon positions and transcript ID bed)
-        if [[ ! -z $exon_list ]]; then
-            echo "Exon annotation file is provided as '$exon_list_prefix'"
-            dx download "$exon_list" -o inputs/beds/exon.list
-
-            # Annotate CNV calls with gene, transcript and exon number information
-            # and calculate per run frequency of calls
-            echo "Running the run-level annotation script"
-            python3 summarise_calls.py inputs/vcfs/ inputs/beds/exon.list
-            mv Annotated_CNV_summary.tsv ${summary_dir}/$run_name"_annotated_CNV_summary.tsv"
-            mv CNV_counts.tsv ${summary_dir}/$run_name"_CNV_counts.tsv"
-        else
-            echo "Exon annotation file was not provided"
-        fi
-    fi
-
     if $toVisualise; then
         mark-section "Visualising calls"
         vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
