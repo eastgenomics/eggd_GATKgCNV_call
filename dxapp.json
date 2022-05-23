@@ -47,27 +47,11 @@
         "help": "contains GC content, mappability and other annotation of target intervals"
         },
         {
-        "name": "exon_list",
-        "label": "exons BED file for annotation",
-        "class": "file",
-        "optional": true,
-        "patterns": ["*.bed", "*.tsv"],
-        "help": "List of exons for selected transcripts, sorted in chromosome order"
-        },
-        {
         "name": "run_name",
         "label": "Name of the run",
         "class": "string",
         "optional": true,
         "help": "prefix for gCNV.bed and summary files"
-        },
-        {
-        "name": "toAnnotate",
-        "label": "Generate summary of CNV calls for the whole run?",
-        "class": "boolean",
-        "optional": true,
-        "default": false,
-        "help": "Whether to generate an annotated_CNV_summary.tsv and a CNV_counts file that summarise CNV calls across the run"
         },
         {
         "name": "toVisualise",
