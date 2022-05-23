@@ -65,7 +65,7 @@ main() {
     if $debug_fail_start; then exit 1; fi
 
     # 1. Run CollectReadCounts:
-    # takes a bam file at a time (and its index file) and the target.bed
+    # takes one bam (and its index) file at a time along with the targets.interval_list
     echo "Running CollectReadCounts for all input bams"
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
@@ -81,12 +81,13 @@ main() {
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     batch_input=""
-    for base_count in inputs/base_counts/*_basecount.*; do
+    for base_count in inputs/base_counts/*_basecount.hdf5; do
         sample_file=$( basename $base_count )
         batch_input+="--input /data/base_counts/${sample_file} "
     done
 
     # 2. Run FilterIntervals:
+    # filters out low coverage or not uniquely mappable regions
     echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
     mark-section "FilterIntervals"
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk FilterIntervals \
@@ -177,9 +178,13 @@ main() {
     ## Create output directories
     vcf_dir=out/result_files/CNV_vcfs && mkdir -p ${vcf_dir}
     summary_dir=out/result_files/CNV_summary && mkdir -p ${summary_dir}
-
-    mark-section "Visualising calls"
     vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
+
+    # and move result files into outdir to be uploaded
+    mv inputs/vcfs/*.vcf ${vcf_dir}/
+    mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
+
+    mark-section "Creating copy ratio visualisation files"
     # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
     echo "Generating gcnv bed files for all sample copy ratios"
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
@@ -191,10 +196,6 @@ main() {
 
     echo "All scripts finished successfully, uploading output files to dx"
     if $debug_fail_end; then exit 1; fi
-
-    # and move result files into outdir to be uploaded
-    mv inputs/vcfs/*.vcf ${vcf_dir}/
-    mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
 
     # Upload output files
     dx-upload-all-outputs --parallel
