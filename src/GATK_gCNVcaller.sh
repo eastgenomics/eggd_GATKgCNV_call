@@ -177,18 +177,16 @@ main() {
     vcf_dir=out/result_files/CNV_vcfs && mkdir -p ${vcf_dir}
     summary_dir=out/result_files/CNV_summary && mkdir -p ${summary_dir}
 
-    if $toVisualise; then
-        mark-section "Visualising calls"
-        vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
-        # Generate bed file from copy ratio files for viewing all samples in IGV
-        echo "Generating gcnv bed files for all sample copy ratios"
-        denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
-        python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
-        --run "$run_name"
+    mark-section "Visualising calls"
+    vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
+    # Generate bed file from copy ratio files for viewing all samples in IGV
+    echo "Generating gcnv bed files for all sample copy ratios"
+    denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
+    python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
+    --run "$run_name"
 
-        mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
-        mv ./*.gcnv.bed.gz* "${vis_dir}"/
-    fi
+    mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
+    mv ./*.gcnv.bed.gz* "${vis_dir}"/
 
     echo "All scripts finished successfully, uploading output files to dx"
     if $debug_fail_end; then exit 1; fi

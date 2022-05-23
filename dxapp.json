@@ -54,14 +54,6 @@
         "help": "prefix for gCNV.bed and summary files"
         },
         {
-        "name": "toVisualise",
-        "label": "Generate gCNV.bed file for visualisation in IGV?",
-        "class": "boolean",
-        "optional": true,
-        "default": true,
-        "help": "Whether to generate a gCNV.bed file that can visualise copy ratios across the run in IGV"
-        },
-        {
         "name": "CollectReadCounts_args",
         "label": "optional parameters for CollectReadCounts",
         "class": "string",
