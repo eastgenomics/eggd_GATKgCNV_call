@@ -62,7 +62,7 @@ main() {
     echo "All input files have downloaded to inputs/"
 
     # Optional to hold job after downloading all input files
-    if $debug_fail_start; then exit 1; fi
+    if [ "$debug_fail_start" == 'true' ]; then exit 1; fi
 
     # 1. Run CollectReadCounts:
     # takes one bam (and its index) file at a time along with the targets.interval_list
@@ -195,7 +195,8 @@ main() {
     mv ./*.gcnv.bed.gz* "${vis_dir}"/
 
     echo "All scripts finished successfully, uploading output files to dx"
-    if $debug_fail_end; then exit 1; fi
+    mark-section "Uploading outputs"
+    if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
     # Upload output files
     dx-upload-all-outputs --parallel
