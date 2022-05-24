@@ -3,7 +3,7 @@
     "title": "GATKgCNV_call",
     "summary": "Dx wrapper to run the GATK germline CNV caller",
     "dxapi": "1.0.0",
-    "version": "0.0.2",
+    "version": "1.0.0",
     "inputSpec": [
         {
         "name": "GATK_docker",
@@ -24,7 +24,7 @@
         },
         {
         "name": "bambis",
-        "label": "Bunch of sample.bam AND sample.bai files",
+        "label": "Pairs of sample.bam AND sample.bai files",
         "class": "array:file",
         "optional": false,
         "patterns": ["*.bam","*.bai"],
@@ -32,7 +32,7 @@
         },
         {
         "name": "interval_list",
-        "label": "target intervals file",
+        "label": "target interval list",
         "class": "file",
         "optional": false,
         "patterns": ["*.interval_list"],
@@ -111,7 +111,7 @@
         },
         {
         "name": "prior_prob",
-        "label": "prior ploidy probability for contigs",
+        "label": "prior probability of ploidy for contigs",
         "class": "file",
         "optional": true,
         "patterns": ["*.tsv"],
