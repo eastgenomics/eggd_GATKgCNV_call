@@ -1,5 +1,5 @@
 #!/bin/bash
-# GATK_gCNVcaller_dev
+# GATKgCNV_call
 #
 # Any code outside of main() (or any entry point you may add) is
 # ALWAYS executed, followed by running the entry point itself.
