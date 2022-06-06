@@ -23,7 +23,7 @@
         ]
         },
         {
-        "name": "bambis",
+        "name": "bambais",
         "label": "Pairs of sample.bam AND sample.bai files",
         "class": "array:file",
         "optional": false,

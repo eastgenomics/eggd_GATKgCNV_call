@@ -53,9 +53,9 @@ main() {
     cd bams
     ## Download all input bam and bai files
     mark-section "Downloading input bam & bai files"
-    for i in ${!bambis[@]}
+    for i in ${!bambais[@]}
     do
-        dx download "${bambis[$i]}"
+        dx download "${bambais[$i]}"
     done
 
     cd /home/dnanexus
