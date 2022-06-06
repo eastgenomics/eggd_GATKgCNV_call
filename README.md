@@ -1,6 +1,6 @@
 # GATK germline CNV caller (DNAnexus Platform App)
 
-Dx wrapper to run the GATK germlineCNVcaller and generate per sample    gCNV.bed file for copy ratio visualisation and summarise CNV calls across samples on a run.
+Dx wrapper to run the GATK germlineCNVcaller and generate per sample gCNV.bed file for copy ratio visualisation and summarise CNV calls across samples on a run.
 This is the source code for an app that runs on the DNAnexus Platform.
 
 ## What does this app do?
