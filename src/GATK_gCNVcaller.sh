@@ -1,5 +1,5 @@
 #!/bin/bash
-# GATK_gCNVcaller_dev
+# GATKgCNV_call
 #
 # Any code outside of main() (or any entry point you may add) is
 # ALWAYS executed, followed by running the entry point itself.
@@ -9,8 +9,8 @@ set -e -x -o pipefail
 
 main() {
 
-    echo "Installing packages"
     mark-section "Installing packages"
+    echo "Installing packages"
     sudo dpkg -i sysstat*.deb
     sudo dpkg -i parallel*.deb
     cd packages
@@ -32,6 +32,7 @@ main() {
     mkdir inputs
 
     # Prior probabilities tsv
+    # file can be provided as input or a default is used bundled with the app
     if [[ ! -z $prior_prob ]]
     then
         echo "Prior prob file is provided as '$prior_prob'"
@@ -42,7 +43,7 @@ main() {
 
     cd inputs
     mkdir beds
-    mark-section "Downloading input files"
+    mark-section "Downloading interval files"
     # Intervals file (preprocessed bed from GATK_prep)
     dx download "$interval_list" -o beds/preprocessed.interval_list
     # Annotation tsv (from GATK_prep)
@@ -51,20 +52,20 @@ main() {
     mkdir bams
     cd bams
     ## Download all input bam and bai files
-    mark-section "Downloading input bam&bai files"
-    for i in ${!bambis[@]}
+    mark-section "Downloading input bam & bai files"
+    for i in ${!bambais[@]}
     do
-        dx download "${bambis[$i]}"
+        dx download "${bambais[$i]}"
     done
 
     cd /home/dnanexus
     echo "All input files have downloaded to inputs/"
 
     # Optional to hold job after downloading all input files
-    if $debug_fail_start; then exit 1; fi
+    if [ "$debug_fail_start" == 'true' ]; then exit 1; fi
 
     # 1. Run CollectReadCounts:
-    # takes a bam file at a time (and its index file) and the target.bed
+    # takes one bam (and its index) file at a time along with the targets.interval_list
     echo "Running CollectReadCounts for all input bams"
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
@@ -80,12 +81,13 @@ main() {
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     batch_input=""
-    for base_count in inputs/base_counts/*_basecount.*; do
+    for base_count in inputs/base_counts/*_basecount.hdf5; do
         sample_file=$( basename $base_count )
         batch_input+="--input /data/base_counts/${sample_file} "
     done
 
-    # C. Run FilterIntervals:
+    # 2. Run FilterIntervals:
+    # filters out low coverage or not uniquely mappable regions
     echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
     mark-section "FilterIntervals"
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk FilterIntervals \
@@ -99,7 +101,7 @@ main() {
     grep -v "^@" inputs/beds/filtered.interval_list | bedtools sort > filtered.bed
     bedtools intersect -v -a preprocessed.bed -b filtered.bed > excluded_intervals.bed
 
-    # 2. Run DetermineGermlineContigPloidy:
+    # 3. Run DetermineGermlineContigPloidy:
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
     # outputs a ploidy model and ploidy-calls for each sample
     echo "Running DetermineGermlineContigPloidy for the calculated basecounts"
@@ -113,7 +115,7 @@ main() {
         --output-prefix ploidy \
         -O /data/ploidy-dir
 
-    # 3. Run GermlineCNVCaller:
+    # 4. Run GermlineCNVCaller:
     # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
     # outputs a CNVcalling model and copy ratio files for each sample
     echo "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
@@ -129,7 +131,7 @@ main() {
         --output-prefix CNV \
         -O /data/gCNV-dir
 
-    # 4. Run PostprocessGermlineCNVCalls:
+    # 5. Run PostprocessGermlineCNVCalls:
     # takes CNV-model in, spits vcfs out
     echo "Running PostprocessGermlineCNVCalls"
     mark-section "PostprocessGermlineCNVCalls"
@@ -162,7 +164,7 @@ main() {
         --output-denoised-copy-ratios /data/vcfs/sample_{}_denoised_copy_ratios.tsv \
     ' ::: $(seq 0 1 $index)
 
-    # Rename output vcf files based on the sample they contain information about
+    # 6. Rename output vcf files based on the sample they contain information about
     find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs 8 ' \
         sample_file=$( basename {} ); file_name="${sample_file%_segments.vcf}"; \
         sample_name=$(bcftools view {} -h | tail -n 1 | cut -f 10 ); \
@@ -176,44 +178,25 @@ main() {
     ## Create output directories
     vcf_dir=out/result_files/CNV_vcfs && mkdir -p ${vcf_dir}
     summary_dir=out/result_files/CNV_summary && mkdir -p ${summary_dir}
-
-    if $toAnnotate; then
-        mark-section "Annotating calls"
-        # Download exons file (list of exon positions and transcript ID bed)
-        if [[ ! -z $exon_list ]]; then
-            echo "Exon annotation file is provided as '$exon_list_prefix'"
-            dx download "$exon_list" -o inputs/beds/exon.list
-
-            # Annotate CNV calls with gene, transcript and exon number information
-            # and calculate per run frequency of calls
-            echo "Running the run-level annotation script"
-            python3 summarise_calls.py inputs/vcfs/ inputs/beds/exon.list
-            mv Annotated_CNV_summary.tsv ${summary_dir}/$run_name"_annotated_CNV_summary.tsv"
-            mv CNV_counts.tsv ${summary_dir}/$run_name"_CNV_counts.tsv"
-        else
-            echo "Exon annotation file was not provided"
-        fi
-    fi
-
-    if $toVisualise; then
-        mark-section "Visualising calls"
-        vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
-        # Generate bed file from copy ratio files for viewing all samples in IGV
-        echo "Generating gcnv bed files for all sample copy ratios"
-        denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
-        python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
-        --run "$run_name"
-
-        mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
-        mv ./*.gcnv.bed.gz* "${vis_dir}"/
-    fi
-
-    echo "All scripts finished successfully, uploading output files to dx"
-    if $debug_fail_end; then exit 1; fi
+    vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
 
     # and move result files into outdir to be uploaded
     mv inputs/vcfs/*.vcf ${vcf_dir}/
     mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
+
+    mark-section "Creating copy ratio visualisation files"
+    # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
+    echo "Generating gcnv bed files for all sample copy ratios"
+    denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
+    python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
+    --run "$run_name"
+
+    mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
+    mv ./*.gcnv.bed.gz* "${vis_dir}"/
+
+    echo "All scripts finished successfully, uploading output files to dx"
+    mark-section "Uploading outputs"
+    if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
     # Upload output files
     dx-upload-all-outputs --parallel

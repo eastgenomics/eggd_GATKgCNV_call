@@ -1,9 +1,9 @@
 {
-    "name": "GATKgCNV_call_v0.0.1_dev",
-    "title": "GATKgCNV_call_v0.0.1_dev",
+    "name": "GATKgCNV_call",
+    "title": "GATKgCNV_call",
     "summary": "Dx wrapper to run the GATK germline CNV caller",
     "dxapi": "1.0.0",
-    "version": "0.0.1",
+    "version": "1.0.0",
     "inputSpec": [
         {
         "name": "GATK_docker",
@@ -15,16 +15,12 @@
             {
             "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
             "path": "/app_assets/GATK/"
-            },
-            {
-            "project": "project-FzyfP204Z5qXBp6696jG5g10",
-            "path": "/apps/GATK/"
             }
         ]
         },
         {
-        "name": "bambis",
-        "label": "Bunch of sample.bam AND sample.bai files",
+        "name": "bambais",
+        "label": "Pairs of sample.bam AND sample.bai files",
         "class": "array:file",
         "optional": false,
         "patterns": ["*.bam","*.bai"],
@@ -32,7 +28,7 @@
         },
         {
         "name": "interval_list",
-        "label": "target intervals file",
+        "label": "target interval list",
         "class": "file",
         "optional": false,
         "patterns": ["*.interval_list"],
@@ -47,35 +43,11 @@
         "help": "contains GC content, mappability and other annotation of target intervals"
         },
         {
-        "name": "exon_list",
-        "label": "exons BED file for annotation",
-        "class": "file",
-        "optional": true,
-        "patterns": ["*.bed", "*.tsv"],
-        "help": "List of exons for selected transcripts, sorted in chromosome order"
-        },
-        {
         "name": "run_name",
         "label": "Name of the run",
         "class": "string",
         "optional": true,
         "help": "prefix for gCNV.bed and summary files"
-        },
-        {
-        "name": "toAnnotate",
-        "label": "Generate summary of CNV calls for the whole run?",
-        "class": "boolean",
-        "optional": true,
-        "default": false,
-        "help": "Whether to generate an annotated_CNV_summary.tsv and a CNV_counts file that summarise CNV calls across the run"
-        },
-        {
-        "name": "toVisualise",
-        "label": "Generate gCNV.bed file for visualisation in IGV?",
-        "class": "boolean",
-        "optional": true,
-        "default": true,
-        "help": "Whether to generate a gCNV.bed file that can visualise copy ratios across the run in IGV"
         },
         {
         "name": "CollectReadCounts_args",
@@ -135,7 +107,7 @@
         },
         {
         "name": "prior_prob",
-        "label": "prior ploidy probability for contigs",
+        "label": "prior probability of ploidy for contigs",
         "class": "file",
         "optional": true,
         "patterns": ["*.tsv"],
