@@ -1,7 +1,7 @@
 {
-    "name": "GATKgCNV_call",
+    "name": "eggd_GATKgCNV_call",
     "title": "GATKgCNV_call",
-    "summary": "Dx wrapper to run the GATK germline CNV caller",
+    "summary": "GATK gCNV germline CNV caller",
     "dxapi": "1.0.0",
     "version": "1.0.0",
     "inputSpec": [
@@ -14,7 +14,7 @@
         "suggestions": [
             {
             "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
-            "path": "/app_assets/GATK/"
+            "path": "/assets/GATK/"
             }
         ]
         },
@@ -32,7 +32,7 @@
         "class": "file",
         "optional": false,
         "patterns": ["*.interval_list"],
-        "help": "sorted in chromosome order, created in the 'prep' step"
+        "help": "interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
         },
         {
         "name": "annotation_tsv",
