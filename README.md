@@ -31,7 +31,17 @@ Parameters to calculate coverage, filter out low quality intervals and call vari
 * a pair of _intervals.vcf (genotype of every interval in the input bed) and _segments.vcf (consecutive intervals with the same CNV status are merged) for each sample
 * gCNV.bed files for copy ratio visualisation in IGV.js for each sample
 * a gCNV.bed file of all samples on the run
-* list of intervals excluded from CNV calling for the run
+* list of intervals excluded from CNV calling for the run, both as a 0- and a 1-based BED file
+
+**How to run this app**:
+
+```bash
+dx run app-eggd_GATKgCNV_call/1.0.0 \
+  -iGATK_docker="<GATK_docker.tar.gz>" \
+  -iinterval_list="<output from prep app>" \
+  -iannotation_tsv="<output from prep app>" \
+  -ibambais="<array of paired sample bam and index file IDs>"
+```
 
 ## Dependencies
 The app requires a tar.gz of the Docker image for GATK 4.2+ as an input. Htslib and bedtools are bundled with the app.
