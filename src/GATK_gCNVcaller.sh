@@ -111,7 +111,6 @@ main() {
     # Convert the 0-based bed file to 1-based
     awk 'BEGIN {OFS="\t"}; {print $1,$2+1,$3}' excluded_intervals.bed > excluded_intervals_1based.bed
 
-    exit
     # 3. Run DetermineGermlineContigPloidy:
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
     # outputs a ploidy model and ploidy-calls for each sample
@@ -194,6 +193,7 @@ main() {
     # and move result files into outdir to be uploaded
     mv inputs/vcfs/*.vcf ${vcf_dir}/
     mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
+    mv excluded_intervals_1based.bed ${summary_dir}/$run_name"_excluded_intervals_1based.bed"
 
     mark-section "Creating copy ratio visualisation files"
     # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
