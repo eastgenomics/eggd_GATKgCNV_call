@@ -97,10 +97,21 @@ main() {
         -O /data/beds/filtered.interval_list
 
     echo "Identifying excluded intervals from CNV calling on this run"
-    grep -v "^@" inputs/beds/preprocessed.interval_list | bedtools sort > preprocessed.bed
-    grep -v "^@" inputs/beds/filtered.interval_list | bedtools sort > filtered.bed
-    bedtools intersect -v -a preprocessed.bed -b filtered.bed > excluded_intervals.bed
+    # Convert interval_list to BED files
+    docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
+        -I /data/beds/preprocessed.interval_list \
+        -O /data/beds/preprocessed.bed
+    docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
+        -I /data/beds/filtered.interval_list \
+        -O /data/beds/filtered.bed
 
+    # Identify regions that are in preprocessed but not in filtered, ie the excluded regions
+    bedtools intersect -v -a inputs/beds/preprocessed.bed -b inputs/beds/filtered.bed > excluded_intervals.bed
+
+    # Convert the 0-based bed file to 1-based
+    awk 'BEGIN {OFS="\t"}; {print $1,$2+1,$3}' excluded_intervals.bed > excluded_intervals_1based.bed
+
+    exit
     # 3. Run DetermineGermlineContigPloidy:
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
     # outputs a ploidy model and ploidy-calls for each sample
