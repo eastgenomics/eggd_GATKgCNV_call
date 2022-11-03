@@ -93,6 +93,10 @@ def generate_copy_ratio_df(args):
         # add sample copy ratio to file
         copy_ratio_df[sample_name] = file_df[sample_name]
 
+    # Start coordinates are currently 1-based, need to be offset by 1
+    # to create a 0-based BED file for IGV visualisation
+    copy_ratio_df['start'] = copy_ratio_df['start'].apply(lambda x: x-1)
+
     return copy_ratio_df
 
 
