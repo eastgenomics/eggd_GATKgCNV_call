@@ -3,7 +3,7 @@
     "title": "GATKgCNV_call",
     "summary": "GATK gCNV germline CNV caller",
     "dxapi": "1.0.0",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "inputSpec": [
         {
         "name": "GATK_docker",
@@ -32,6 +32,12 @@
         "class": "file",
         "optional": false,
         "patterns": ["*.interval_list"],
+        "suggestions": [
+            {
+            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+            "path": "/assets/GATK/gCNV_inputs/"
+            }
+        ],
         "help": "interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
         },
         {
@@ -40,6 +46,12 @@
         "class": "file",
         "optional": false,
         "patterns": ["*.tsv"],
+        "suggestions": [
+            {
+            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+            "path": "/assets/GATK/gCNV_inputs/"
+            }
+        ],
         "help": "contains GC content, mappability and other annotation of target intervals"
         },
         {
@@ -55,7 +67,7 @@
         "class": "string",
         "optional": true,
         "default": "",
-        "help": "eg  '--format TSV'"
+        "help": "eg  '--format TSV', default is HDF5"
         },
         {
         "name": "FilterIntervals_args",
