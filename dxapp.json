@@ -3,7 +3,7 @@
     "title": "GATKgCNV_call",
     "summary": "GATK gCNV germline CNV caller",
     "dxapi": "1.0.0",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "inputSpec": [
         {
         "name": "GATK_docker",
@@ -141,7 +141,7 @@
         "file": "src/GATK_gCNVcaller.sh",
         "timeoutPolicy": {
         "*": {
-            "hours": 2
+            "hours": 3
         }
         },
         "assetDepends": [
@@ -176,7 +176,7 @@
         "aws:eu-central-1": {
         "systemRequirements": {
             "*": {
-            "instanceType": "mem1_ssd1_v2_x8"
+            "instanceType": "mem2_ssd1_v2_x8"
             }
         }
         }
