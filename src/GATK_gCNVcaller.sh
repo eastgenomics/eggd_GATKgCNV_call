@@ -33,9 +33,11 @@ main() {
 
     # Parse the image ID from the list of docker images
     # need to export variables so they're available to parallel
+    set +x  # suppress all the declared variables in logs
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
     export $CollectReadCounts_args
     export $PostprocessGermlineCNVCalls_args
+    set -x
 
     ## Create folder to collect input files:
     mkdir inputs
@@ -57,14 +59,9 @@ main() {
     # Annotation tsv (from GATK_prep)
     dx download "$annotation_tsv" -o inputs/beds/annotated_intervals.tsv
 
-    mkdir inputs/bams
-    ## Download all input bam and bai files
+
     mark-section "Downloading input bam & bai files"
-    # for i in ${!bambais[@]}
-    # do
-    #     dx download "${bambais[$i]}"
-    # done
-    # drop the $dnanexus_link from the file IDs
+    mkdir inputs/bams
     file_ids=$(grep -Po  "file-[\d\w]+" <<< "${bambais[@]}")
     SECONDS=0
     echo "$file_ids" | xargs -n1 -P${THREADS} dx download --no-progress -o inputs/bams/
