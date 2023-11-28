@@ -7,15 +7,24 @@
 # Exit at any point if there is any error and output each line as it is executed (for debugging)
 set -e -x -o pipefail
 
+# prefixes all lines of commands written to stdout with datetime
+PS4='\000[$(date)]\011'
+export TZ=Europe/London
+set -exo pipefail
+
+# set frequency of instance usage in logs to 30 seconds
+kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
+/usr/bin/dx-dstat 30
+
 main() {
 
+    THREADS=$(nproc --all)
+
     mark-section "Installing packages"
-    echo "Installing packages"
     sudo dpkg -i sysstat*.deb
     sudo dpkg -i parallel*.deb
-    cd packages
-    pip install -q pytz-* python_dateutil-* pysam-* numpy-* pandas-* pybedtools-* PyVCF-*
-    cd ..
+    sudo -H python3 -m pip install --no-index --no-deps packages/*
+
 
     # Load the GATK docker image
     mark-section "Loading GATK Docker image"
@@ -41,24 +50,28 @@ main() {
         mv prior_prob.tsv inputs/
     fi
 
-    cd inputs
-    mkdir beds
+    mkdir inputs/beds
     mark-section "Downloading interval files"
     # Intervals file (preprocessed bed from GATK_prep)
-    dx download "$interval_list" -o beds/preprocessed.interval_list
+    dx download "$interval_list" -o inputs/beds/preprocessed.interval_list
     # Annotation tsv (from GATK_prep)
-    dx download "$annotation_tsv" -o beds/annotated_intervals.tsv
+    dx download "$annotation_tsv" -o inputs/beds/annotated_intervals.tsv
 
-    mkdir bams
-    cd bams
+    mkdir inputs/bams
     ## Download all input bam and bai files
     mark-section "Downloading input bam & bai files"
-    for i in ${!bambais[@]}
-    do
-        dx download "${bambais[$i]}"
-    done
+    # for i in ${!bambais[@]}
+    # do
+    #     dx download "${bambais[$i]}"
+    # done
+    # drop the $dnanexus_link from the file IDs
+    file_ids=$(grep -Po  "file-[\d\w]+" <<< "${bambais[@]}")
+    SECONDS=0
+    echo "$file_ids" | xargs -n1 -P${THREADS} dx download --no-progress -o inputs/bams/
+    duration=$SECONDS
+    total=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
+    echo "Downloaded $(wc -w <<< "$file_ids") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 
-    cd /home/dnanexus
     echo "All input files have downloaded to inputs/"
 
     # Optional to hold job after downloading all input files
@@ -69,15 +82,15 @@ main() {
     echo "Running CollectReadCounts for all input bams"
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
-    find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs 8 \
-    'sample_file=$( basename filename ); \
-    sample_name="${sample_file%.bam}"; \
-    echo $sample_name; \
-    /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data $GATK_image gatk CollectReadCounts \
-    -I /data/bams/${sample_file} \
-    -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
-    ${CollectReadCounts_args} \
-    -O /data/base_counts/${sample_name}_basecount.hdf5'
+    find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs ${THREADS} \
+        'sample_file=$( basename filename ); \
+        sample_name="${sample_file%.bam}"; \
+        echo $sample_name; \
+        /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data $GATK_image gatk CollectReadCounts \
+        -I /data/bams/${sample_file} \
+        -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
+        ${CollectReadCounts_args} \
+        -O /data/base_counts/${sample_name}_basecount.hdf5'
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     batch_input=""
@@ -156,7 +169,7 @@ main() {
     # triple colon at the end is the parallel way to provide an array of integers
     sample_num=$(ls inputs/bams/*.bam | wc -l)
     index=$(expr $sample_num - 1)
-    parallel --jobs 8 '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
+    parallel --jobs ${THREADS} '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         ${PostprocessGermlineCNVCalls_args} \
@@ -172,7 +185,7 @@ main() {
     ' ::: $(seq 0 1 $index)
 
     # 6. Rename output vcf files based on the sample they contain information about
-    find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs 8 ' \
+    find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs ${THREADS} ' \
         sample_file=$( basename {} ); file_name="${sample_file%_segments.vcf}"; \
         sample_name=$(bcftools view {} -h | tail -n 1 | cut -f 10 ); \
         mv inputs/vcfs/$file_name"_denoised_copy_ratios.tsv" inputs/vcfs/$sample_name"_denoised_copy_ratios.tsv"; \
@@ -195,8 +208,9 @@ main() {
     # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
     echo "Generating gcnv bed files for all sample copy ratios"
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
-    python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
-    --run "$run_name"
+    python3 generate_gcnv_bed.py \
+        --copy_ratios "$denoised_copy_ratio_files" -s \
+        --run "$run_name"
 
     mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
     mv ./*.gcnv.bed.gz* "${vis_dir}"/
@@ -206,6 +220,9 @@ main() {
     if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
     # Upload output files
+    SECONDS=0
     dx-upload-all-outputs --parallel
+    duration=$SECONDS
+    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
 
 }
