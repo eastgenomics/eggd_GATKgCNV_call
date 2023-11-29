@@ -14,11 +14,11 @@ set -exo pipefail
 
 # set frequency of instance usage in logs to 30 seconds
 kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
-/usr/bin/dx-dstat 30
+/usr/bin/dx-dstat 15
 
 main() {
-
-    THREADS=$(nproc --all)
+    # no. parallel processes to run (half of total cores)
+    THREADS=$(bc <<< "$(nproc --all) / 2")
 
     mark-section "Installing packages"
     sudo dpkg -i sysstat*.deb
@@ -33,13 +33,13 @@ main() {
 
     # Parse the image ID from the list of docker images
     # need to export variables so they're available to parallel
-    set +x  # suppress all the declared variables in logs
-    export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
-    export $CollectReadCounts_args
-    export $PostprocessGermlineCNVCalls_args
+    set +x  # suppress all the declared variables in logs as its long
+    export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2) &> /dev/null
+    export $CollectReadCounts_args &> /dev/null
+    export $PostprocessGermlineCNVCalls_args &> /dev/null
     set -x
 
-    ## Create folder to collect input files:
+    ## Create folder to collect input files
     mkdir inputs
 
     # Prior probabilities tsv
@@ -64,7 +64,7 @@ main() {
     mkdir inputs/bams
     file_ids=$(grep -Po  "file-[\d\w]+" <<< "${bambais[@]}")
     SECONDS=0
-    echo "$file_ids" | xargs -n1 -P${THREADS} dx download --no-progress -o inputs/bams/
+    echo "$file_ids" | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
     duration=$SECONDS
     total=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
     echo "Downloaded $(wc -w <<< "$file_ids") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
@@ -77,6 +77,7 @@ main() {
     # 1. Run CollectReadCounts:
     # takes one bam (and its index) file at a time along with the targets.interval_list
     echo "Running CollectReadCounts for all input bams"
+
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
     find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs ${THREADS} \
