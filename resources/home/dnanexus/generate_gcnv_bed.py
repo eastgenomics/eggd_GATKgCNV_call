@@ -4,6 +4,7 @@ Script to generate bed file from a run of cnv calls and intervals list.
 Requires bgzip and tabix to be installed and on path.
 """
 import argparse
+from linecache import getline
 from pathlib import Path
 import subprocess
 
@@ -26,6 +27,20 @@ def parse_args():
         help=(
             'generate per sample bed file, with just the sample highlighted '
             'and run level mean and std deviations added'
+        )
+    )
+    parser.add_argument(
+        '--keep_all_samples', action='store_true', default=True,
+        help=(
+            'controls if to keep all sample traces in per sample files, '
+            'if true all other samples will be coloured grey'
+        )
+    )
+    parser.add_argument(
+        '--hide_sample_names', action='store_true', default=True,
+        help=(
+            'controls if to hide all other sample labels in per sample files '
+            'if --keep_all_samples has been set to true'
         )
     )
 
@@ -100,16 +115,19 @@ def generate_copy_ratio_df(args):
     return copy_ratio_df
 
 
-def generate_per_sample_copy_ratio_dfs(copy_ratio_df):
+def generate_per_sample_copy_ratio_dfs(copy_ratio_df, keep_all_samples):
     """
         Generates one dataframe / bed file per sample, with run level mean
         and std deviations added
 
         Args:
             - copy_ratio_df (df): df of all copy ratios of all samples
+            - keep_all_samples (bool): determines if to keep all sample
+                traces in per sample files
 
         Returns
-            - per_sample_dfs (list): list of tuples, with (name, df) per sample
+            - pd.DataFrame|list: either single DataFrame if keep_all_samples
+                is True, or list of tuples, with (name, df) per sample
     """
     samples = copy_ratio_df.columns.tolist()[3:]
 
@@ -127,21 +145,24 @@ def generate_per_sample_copy_ratio_dfs(copy_ratio_df):
         'mean_minus_std': minus_std, 'mean_minus_std2': minus_std2
     })
 
+    if keep_all_samples:
+        copy_ratio_df = pd.concat([copy_ratio_df, mean_std_df], axis='columns')
+        return copy_ratio_df
+    else:
+        per_sample_dfs = []
 
-    per_sample_dfs = []
+        for sample in samples:
 
-    for sample in samples:
+            sample_df = pd.concat(
+                [copy_ratio_df[['chr', 'start', 'end', sample]].copy(),
+                    mean_std_df], axis='columns')
 
-        sample_df = pd.concat(
-            [copy_ratio_df[['chr', 'start', 'end', sample]].copy(),
-                mean_std_df], axis='columns')
+            per_sample_dfs.append((sample, sample_df))
 
-        per_sample_dfs.append((sample, sample_df))
-
-    return per_sample_dfs
+        return per_sample_dfs
 
 
-def write_outfile(copy_ratio_df, prefix, per_sample):
+def write_outfile(copy_ratio_df, prefix, per_sample, hide_sample_names):
     """
         Write output bed files and compress with bgzip.
         Bed file with highlight_samples has random colouring of each sample
@@ -152,6 +173,8 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
             - prefix (str): prefix for naming output file
             - per_sample (bool): controls writing bed file header, if per sample the
                 mean tracks are added, else if per run clickToHighlight is enabled
+            - hide_sample_names (bool): controls if to hide other sample labels
+                in per sample file where all sample traces are being added
     """
     outfile = "{}_copy_ratios.gcnv.bed".format(prefix)
 
@@ -171,11 +194,29 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
             }
 
             highlight = ' '.join([f"highlight={x};{y}" for x, y in colours.items()])
-            fh.write(f"track  type=gcnv height=500 {highlight} \n")
+            fh.write(f"track type=gcnv height=500 {highlight} \n")
         else:
             fh.write("track type=gcnv height=500 clickToHighlight=any \n")
 
-    copy_ratio_df.to_csv(outfile, sep='\t', index=False, mode='a')
+        if not hide_sample_names:
+            copy_ratio_df.to_csv(outfile, sep='\t', index=False, mode='a')
+        else:
+            # written all sample traces as grey lines to per sample file
+            # => hide names of all but our sample
+            to_keep = [
+                'chr', 'start', 'end', 'mean', 'mean_plus_std', 'mean_plus_std2',
+                'mean_minus_std', 'mean_minus_std2', prefix
+            ]
+
+            header = '\t'.join([
+                '⠀' if x not in to_keep else x
+                for x in copy_ratio_df.columns.tolist()
+            ])
+
+            fh.write(header)
+            copy_ratio_df.to_csv(
+                outfile, sep='\t', header=False, index=False, mode='a'
+            )
 
     # compress & index
     subprocess.call("bgzip {}".format(Path(outfile)), shell=True)
@@ -186,18 +227,36 @@ def main():
 
     args = parse_args()
     copy_ratio_df = generate_copy_ratio_df(args)
+    samples = copy_ratio_df.columns.tolist()[3:]
 
     # write output bed file
-    write_outfile(copy_ratio_df, args.run, per_sample=False)
+    write_outfile(
+        copy_ratio_df, args.run, per_sample=False, hide_sample_names=False)
 
     if args.per_sample:
         # generating per sample bed files
-        per_sample_dfs = generate_per_sample_copy_ratio_dfs(copy_ratio_df)
+        per_sample_dfs = generate_per_sample_copy_ratio_dfs(
+            copy_ratio_df, args.keep_all_samples
+        )
 
-        for sample in per_sample_dfs:
-            sample_name = sample[0]
-            sample_df = sample[1]
-            write_outfile(sample_df, sample_name, per_sample=True)
+        if isinstance(per_sample_dfs, list):
+            # writing per sample df with just sample trace + mean + std dev
+            for sample in per_sample_dfs:
+                sample_name = sample[0]
+                sample_df = sample[1]
+                write_outfile(
+                    sample_df, sample_name, per_sample=True,
+                    hide_sample_names=args.hide_sample_names
+                )
+        else:
+            # writing per sample df with all samples, colouring the sample
+            # trace red and leaving all other sample traces in grey
+            for sample in samples:
+                write_outfile(
+                    per_sample_dfs, sample, per_sample=True,
+                    hide_sample_names=args.hide_sample_names
+                )
+
 
 if __name__ == "__main__":
     main()
