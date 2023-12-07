@@ -4,7 +4,6 @@ Script to generate bed file from a run of cnv calls and intervals list.
 Requires bgzip and tabix to be installed and on path.
 """
 import argparse
-from linecache import getline
 from pathlib import Path
 import subprocess
 
