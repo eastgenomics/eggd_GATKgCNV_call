@@ -29,7 +29,7 @@
         {
         "name": "interval_list",
         "label": "target interval list",
-        "class": "file",
+        "class": "array:file",
         "optional": false,
         "patterns": ["*.interval_list"],
         "suggestions": [
@@ -38,12 +38,12 @@
             "path": "/assets/GATK/gCNV_inputs/"
             }
         ],
-        "help": "interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
+        "help": "TODO - reword for multiple - interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
         },
         {
         "name": "annotation_tsv",
         "label": "annotation for the intervals list",
-        "class": "file",
+        "class": "array:file",
         "optional": false,
         "patterns": ["*.tsv"],
         "suggestions": [
@@ -52,7 +52,7 @@
             "path": "/assets/GATK/gCNV_inputs/"
             }
         ],
-        "help": "contains GC content, mappability and other annotation of target intervals"
+        "help": "TODO - reword for multiple - contains GC content, mappability and other annotation of target intervals"
         },
         {
         "name": "run_name",

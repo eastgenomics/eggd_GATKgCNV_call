@@ -7,7 +7,7 @@
 # Exit at any point if there is any error and output each line as it is executed (for debugging)
 set -e -x -o pipefail
 
-main() {
+run_cnv_calling() {
 
     mark-section "Installing packages"
     echo "Installing packages"
@@ -207,5 +207,36 @@ main() {
 
     # Upload output files
     dx-upload-all-outputs --parallel
+
+}
+
+main() {
+
+    for i in ${!interval_list[@]}; do dx download "${interval_list[$i]}"; done
+    for i in ${!annotation_tsv[@]}; do dx download "${annotation_tsv[$i]}"; done
+    for i in ${!bambais[@]}; do
+        new_add=$(echo ${bambais[$i]} | jq '.["$dnanexus_link"]' | sed s/\"//g )
+        bambais_str="$bambais_str"" -ibambais=""$new_add"
+    done
+    GATK_docker=$(echo ${GATK_docker} | jq '.["$dnanexus_link"]' | sed s/\"//g )
+
+    cnv_call_jobs=()
+    for interval_file in $(ls *interval_list); do
+        prefix=$( basename $interval_file | cut -d "." -f1 )
+        interval_list=$interval_file
+        annotation_tsv="$prefix"_annotation.tsv
+        command="dx-jobutil-new-job run_cnv_calling -iinterval_list=$interval_list -iannotation_tsv=$annotation_tsv $bambais_str -iGATK_docker=$GATK_docker -irun_name=$run_name"
+        cnv_call_jobs+=($(eval $command))
+    done
+
+    # Get the output from the cnv_call jobs
+    echo "cnv_call jobs:"
+    echo "${cnv_call_jobs[@]}"
+    
+    echo "Specifying output files"
+    for job in ${cnv_call_jobs[@]}
+    do
+        dx-upload-all-outputs --parallel
+    done
 
 }
