@@ -58,7 +58,7 @@
         "name": "run_name",
         "label": "Name of the run",
         "class": "string",
-        "optional": true,
+        "optional": false,
         "help": "prefix for gCNV.bed and summary files"
         },
         {
@@ -176,7 +176,7 @@
         "aws:eu-central-1": {
         "systemRequirements": {
             "*": {
-            "instanceType": "mem2_ssd1_v2_x8"
+            "instanceType": "mem2_ssd1_v2_x16"
             }
         }
         }

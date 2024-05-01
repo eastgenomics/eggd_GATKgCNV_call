@@ -41,25 +41,11 @@ run_cnv_calling() {
         mv prior_prob.tsv inputs/
     fi
 
-    cd inputs
-    mkdir beds
-    mark-section "Downloading interval files"
-    # Intervals file (preprocessed bed from GATK_prep)
-    dx download "$interval_list" -o beds/preprocessed.interval_list
-    # Annotation tsv (from GATK_prep)
-    dx download "$annotation_tsv" -o beds/annotated_intervals.tsv
-
-    mkdir bams
-    cd bams
-    ## Download all input bam and bai files
-    mark-section "Downloading input bam & bai files"
-    for i in ${!bambais[@]}
-    do
-        dx download "${bambais[$i]}"
-    done
-
     cd /home/dnanexus
     echo "All input files have downloaded to inputs/"
+
+    ls
+    ls inputs
 
     # Optional to hold job after downloading all input files
     if [ "$debug_fail_start" == 'true' ]; then exit 1; fi
@@ -212,19 +198,26 @@ run_cnv_calling() {
 
 main() {
 
-    for i in ${!interval_list[@]}; do dx download "${interval_list[$i]}"; done
-    for i in ${!annotation_tsv[@]}; do dx download "${annotation_tsv[$i]}"; done
-    for i in ${!bambais[@]}; do
-        new_add=$(echo ${bambais[$i]} | jq '.["$dnanexus_link"]' | sed s/\"//g )
-        bambais_str="$bambais_str"" -ibambais=""$new_add"
-    done
-    GATK_docker=$(echo ${GATK_docker} | jq '.["$dnanexus_link"]' | sed s/\"//g )
+    mkdir -p inputs/beds
+    mark-section "Downloading interval files"
+    # Intervals file (preprocessed bed from GATK_prep)
+    for i in ${!interval_list[@]}; do dx download "${interval_list[$i]}" -o inputs/beds/; done
+    # Annotation tsv (from GATK_prep)
+    for i in ${!annotation_tsv[@]}; do dx download "${annotation_tsv[$i]}" -o inputs/beds/; done
+
+    mkdir -p inputs/bams
+    ## Download all input bam and bai files
+    mark-section "Downloading input bam & bai files"
+    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
+    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | sed s/file/\ -ibambais\=file/g
+    
+    GATK_docker=$(echo ${GATK_docker} | jq -r '.["$dnanexus_link"]' )
 
     cnv_call_jobs=()
-    for interval_file in $(ls *interval_list); do
+    for interval_file in $(ls inputs/beds/*interval_list); do
         prefix=$( basename $interval_file | cut -d "." -f1 )
-        interval_list=$interval_file
-        annotation_tsv="$prefix"_annotation.tsv
+        interval_list=/$interval_file
+        annotation_tsv=inputs/beds/"$prefix"_annotation.tsv
         command="dx-jobutil-new-job run_cnv_calling -iinterval_list=$interval_list -iannotation_tsv=$annotation_tsv $bambais_str -iGATK_docker=$GATK_docker -irun_name=$run_name"
         cnv_call_jobs+=($(eval $command))
     done
@@ -236,7 +229,8 @@ main() {
     echo "Specifying output files"
     for job in ${cnv_call_jobs[@]}
     do
-        dx-upload-all-outputs --parallel
+        dx-jobutil-add-output result_files ${job}:result_files --class=array:jobref
+        #dx-jobutil-add-output stats_txts ${job}:stats_txt --class=array:jobref
     done
 
 }
