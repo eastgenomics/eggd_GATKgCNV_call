@@ -41,11 +41,20 @@ run_cnv_calling() {
         mv prior_prob.tsv inputs/
     fi
 
+    mkdir inputs/beds
+    mark-section "Downloading interval files"
+    # Intervals file (preprocessed bed from GATK_prep)
+    dx download "$interval_list" -o inputs/beds/preprocessed.interval_list
+    # Annotation tsv (from GATK_prep)
+    dx download "$annotation_tsv" -o inputs/beds/annotated_intervals.tsv
+
+    mkdir inputs/bams
+    ## Download all input bam and bai files
+    mark-section "Downloading input bam & bai files"
+    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
+
     cd /home/dnanexus
     echo "All input files have downloaded to inputs/"
-
-    ls
-    ls inputs
 
     # Optional to hold job after downloading all input files
     if [ "$debug_fail_start" == 'true' ]; then exit 1; fi
@@ -198,27 +207,34 @@ run_cnv_calling() {
 
 main() {
 
-    mkdir -p inputs/beds
-    mark-section "Downloading interval files"
-    # Intervals file (preprocessed bed from GATK_prep)
-    for i in ${!interval_list[@]}; do dx download "${interval_list[$i]}" -o inputs/beds/; done
-    # Annotation tsv (from GATK_prep)
-    for i in ${!annotation_tsv[@]}; do dx download "${annotation_tsv[$i]}" -o inputs/beds/; done
+    # Make Intervals & Annotation files arrays to allow fileIDs to be paired up as inputs to subjobs
+    declare -A interval_file_array
+    for i in ${!interval_list[@]}; do
+        prefix=$( dx describe --name "${interval_list[$i]}" | cut -d "." -f1 )
+        id=$( dx describe --json "${interval_list[$i]}" | jq -r '.id' )
+        interval_file_array+=( ["$prefix"]=$id )
+    done
 
-    mkdir -p inputs/bams
-    ## Download all input bam and bai files
-    mark-section "Downloading input bam & bai files"
-    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
+    declare -A annotation_tsv_array
+    for i in ${!annotation_tsv[@]}; do
+        prefix=$( dx describe --name "${annotation_tsv[$i]}" | cut -d "." -f1 )
+        id=$( dx describe --json "${annotation_tsv[$i]}" | jq -r '.id' )
+        annotation_tsv_array+=( ["$prefix"]=$id )
+    done
+
+    # Make bambais string
     echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | sed s/file/\ -ibambais\=file/g
     
+    # FileID for docker image
     GATK_docker=$(echo ${GATK_docker} | jq -r '.["$dnanexus_link"]' )
 
+    # Set off subjobs per intervals file (usually per chromosome if split)
     cnv_call_jobs=()
-    for interval_file in $(ls inputs/beds/*interval_list); do
-        prefix=$( basename $interval_file | cut -d "." -f1 )
-        interval_list=/$interval_file
-        annotation_tsv=inputs/beds/"$prefix"_annotation.tsv
-        command="dx-jobutil-new-job run_cnv_calling -iinterval_list=$interval_list -iannotation_tsv=$annotation_tsv $bambais_str -iGATK_docker=$GATK_docker -irun_name=$run_name"
+
+    for i in ${!interval_file_array[@]}; do
+        interval_list="${interval_file_array[$i]}"
+        annotation_tsv="${annotation_tsv_array[$i]}"
+        command="dx-jobutil-new-job run_cnv_calling -iinterval_list=$interval_list -iannotation_tsv=$annotation_tsv $bambais_str -iGATK_docker=$GATK_docker -irun_name=$run_name --instance-type mem2_ssd1_v2_x16"
         cnv_call_jobs+=($(eval $command))
     done
 
