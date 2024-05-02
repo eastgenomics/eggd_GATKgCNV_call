@@ -38,7 +38,7 @@
             "path": "/assets/GATK/gCNV_inputs/"
             }
         ],
-        "help": "TODO - reword for multiple - interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
+        "help": "interval list(s) sorted in chromosome order, created in the 'GATKgCNV_prep' step"
         },
         {
         "name": "annotation_tsv",
@@ -52,7 +52,7 @@
             "path": "/assets/GATK/gCNV_inputs/"
             }
         ],
-        "help": "TODO - reword for multiple - contains GC content, mappability and other annotation of target intervals"
+        "help": "contains GC content, mappability and other annotation of target intervals. Must match intervals_list."
         },
         {
         "name": "run_name",
