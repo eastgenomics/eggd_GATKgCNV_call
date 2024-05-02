@@ -217,7 +217,7 @@ main() {
 
     declare -A annotation_tsv_array
     for i in ${!annotation_tsv[@]}; do
-        prefix=$( dx describe --name "${annotation_tsv[$i]}" | cut -d "." -f1 )
+        prefix=$( dx describe --name "${annotation_tsv[$i]}" | cut -d "_" -f1 )
         id=$( dx describe --json "${annotation_tsv[$i]}" | jq -r '.id' )
         annotation_tsv_array+=( ["$prefix"]=$id )
     done
