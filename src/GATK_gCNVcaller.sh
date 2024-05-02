@@ -226,7 +226,7 @@ main() {
     bambais_str=$( echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | sed s/file/\ -ibambais\=file/g )
     
     # FileID for docker image
-    GATK_docker=$(echo ${GATK_docker} | jq -r '.["$dnanexus_link"]' )
+    GATK_docker=$( echo ${GATK_docker[@]} | jq -r '.["$dnanexus_link"]' )
 
     # Set off subjobs per intervals file (usually per chromosome if split)
     cnv_call_jobs=()
@@ -234,7 +234,9 @@ main() {
     for i in ${!interval_file_array[@]}; do
         interval_list="${interval_file_array[$i]}"
         annotation_tsv="${annotation_tsv_array[$i]}"
-        command="dx-jobutil-new-job run_cnv_calling -iinterval_list=$interval_list -iannotation_tsv=$annotation_tsv $bambais_str -iGATK_docker=$GATK_docker -irun_name=$run_name --instance-type mem2_ssd1_v2_x16"
+        command="dx-jobutil-new-job run_cnv_calling -iinterval_list=$interval_list \
+                    -iannotation_tsv=$annotation_tsv $bambais_str -iGATK_docker=$GATK_docker \
+                    -irun_name=$run_name --instance-type mem2_ssd1_v2_x16"
         cnv_call_jobs+=($(eval $command))
     done
 
