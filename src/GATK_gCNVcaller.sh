@@ -223,7 +223,7 @@ main() {
     done
 
     # Make bambais string
-    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | sed s/file/\ -ibambais\=file/g
+    bambais_str=$( echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | sed s/file/\ -ibambais\=file/g )
     
     # FileID for docker image
     GATK_docker=$(echo ${GATK_docker} | jq -r '.["$dnanexus_link"]' )
