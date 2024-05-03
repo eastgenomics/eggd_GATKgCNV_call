@@ -248,6 +248,7 @@ main() {
     echo "${cnv_call_jobs[@]}"
 
     # Download all output files to head job instance (here)
+    # TODO this doesn't work. Find another way of downloading all the files.
     mkdir outputs
     for job in ${cnv_call_jobs[@]}; do
         subdir=${job}:name
@@ -262,7 +263,7 @@ main() {
         bcftools merge outputs/*/"$unique_vcf_name" > out/result_files/"$unique_vcf_name"
     done
 
-    # Sample BEDs & TBIs
+    # TODO Sample BEDs & TBIs
 
     # Run BEDs & TBIs
     # Concatenate the files
@@ -276,8 +277,9 @@ main() {
     cat merged_bed >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
     # Sense check the headers are identical (i.e. samples are in the same order & could be concatenated)
     echo HEADERS; for i in ${headers[@]}; do echo $i; done | sort | uniq | wc -l
+    # TODO error if the above > 1
 
-    #run_gcnv_tbis=
+    # TODO run_gcnv_tbis
 
     # Excluded Interbals BED
     excluded_intervals=$( cat outputs/*/"$run_name"_excluded_intervals.bed > out/result_files/"$run_name"_excluded_intervals.bed)
