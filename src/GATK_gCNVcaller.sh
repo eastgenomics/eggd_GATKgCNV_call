@@ -252,7 +252,7 @@ main() {
     for job in ${cnv_call_jobs[@]}; do
         subdir=${job}:name
         mkdir $subdir
-        dx download ${job}:result_files -o outputs/$subdir
+        dx download -a ${job}:result_files -o outputs/$subdir
     done
 
     # Merge all the files so there's one per chromosome per sample
