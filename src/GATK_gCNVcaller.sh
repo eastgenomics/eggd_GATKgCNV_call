@@ -248,18 +248,17 @@ main() {
     echo "${cnv_call_jobs[@]}"
 
     # Download all output files to head job instance (here)
-    # TODO this doesn't work. Find another way of downloading all the files.
-    mkdir outputs
     for job in ${cnv_call_jobs[@]}; do
-        subdir=${job}:name
-        mkdir $subdir
-        dx download -a ${job}:result_files -o outputs/$subdir
+        mkdir -p outputs/${job}
+        for i in $(dx describe ${job}:result_files --json --multi | jq -r '.[] | .id'); do
+            dx download $i -o outputs/${job}/
+        done
     done
 
     # Merge all the files so there's one per chromosome per sample
     # Interval & Segments VCFs
     mkdir -p out/result_files
-    for unique_vcf_name in $( find outputs/ -name *.vcf | uniq ); do
+    for unique_vcf_name in $( basename -a $(find outputs/ -name *.vcf) | uniq ); do
         bcftools merge outputs/*/"$unique_vcf_name" > out/result_files/"$unique_vcf_name"
     done
 
@@ -267,16 +266,16 @@ main() {
 
     # Run BEDs & TBIs
     # Concatenate the files
-    headers=()
-    for bedfile in $( find outputs/ -name "$run_name"_copy_ratios.gcnv.bed.gz ); do
-        headers+=($( zcat $bedfile | head -n 2 ))
-        zcat $bedfile | tail -n +3 >> merged_bed
-    done
+    #headers=()
+    #for bedfile in $( find outputs/ -name "$run_name"_copy_ratios.gcnv.bed.gz ); do
+    #    headers+=($( zcat $bedfile | head -n 2 ))
+    #    zcat $bedfile | tail -n +3 >> merged_bed
+    #done
     # Add header & copy to result directory
-    echo ${headers[@]} | uniq > out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
-    cat merged_bed >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
+    #echo ${headers[@]} | uniq > out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
+    #cat merged_bed >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
     # Sense check the headers are identical (i.e. samples are in the same order & could be concatenated)
-    echo HEADERS; for i in ${headers[@]}; do echo $i; done | sort | uniq | wc -l
+    #echo HEADERS; for i in ${headers[@]}; do echo $i; done | sort | uniq | wc -l
     # TODO error if the above > 1
 
     # TODO run_gcnv_tbis
