@@ -263,7 +263,7 @@ main() {
     done
     mkdir -p out/result_files
     for unique_vcf_name in $( basename -s .vcf.gz $(find outputs/ -name "*.vcf.gz") | sort | uniq ); do
-        bcftools concat -n outputs/*/"$unique_vcf_name".vcf.gz -Ov -o out/result_files/"$unique_vcf_name".vcf
+        bcftools concat outputs/*/"$unique_vcf_name".vcf.gz -Ov -o out/result_files/"$unique_vcf_name".vcf
     done
 
     # Copy Ratio BED files
