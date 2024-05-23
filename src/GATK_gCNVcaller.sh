@@ -258,7 +258,7 @@ main() {
     # Merge all the files so there's one per chromosome per sample
     # Interval & Segments VCFs
     for vcf in $(find outputs/ -name *.vcf); do
-        bcftools view -Oz -o "$vcf".gz
+        bcftools view $vcf -Oz -o "$vcf".gz
         bcftools index "$vcf".gz
     done
     mkdir -p out/result_files
