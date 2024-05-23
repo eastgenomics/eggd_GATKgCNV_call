@@ -266,25 +266,24 @@ main() {
         bcftools merge outputs/*/"$unique_vcf_name".vcf.gz -Ov -o out/result_files/"$unique_vcf_name".vcf
     done
 
-    # TODO Sample BEDs & TBIs
-
-    # Run BEDs & TBIs
+    # Copy Ratio BED files
     # Concatenate the files
-    for bedfile in $( find outputs/ -name "$run_name"_copy_ratios.gcnv.bed.gz ); do
-        echo "$( zcat $bedfile | head -n 2 )" >> headers.txt
-        zcat $bedfile | tail -n +3 >> merged.bed
+    for unique_bed_name in $( basename -s .gcnv.bed.gz $(find outputs/ -name "*.gcnv.bed.gz") | sort | uniq ); do
+        for bedfile in $( find outputs/ -name "$unique_bed_name".gcnv.bed.gz ); do
+            echo "$( zcat $bedfile | head -n 2 )" >> "$unique_bed_name"_headers.txt
+            zcat $bedfile | tail -n +3 >> "$unique_bed_name"_merged.bed
+        done
+        # Check header is in the same order in all files
+        if (( $(cat "$unique_bed_name"_headers.txt | sort | uniq | wc -l) != 2 )); then 
+            echo "HEADERS DO NOT MATCH"
+            exit 1
+        fi
+        # Add header & copy to result directory
+        cat "$unique_bed_name"_headers.txt| sort | uniq | tail -n 1 > out/result_files/"$unique_bed_name".gcnv.bed.gz
+        cat "$unique_bed_name"_headers.txt| sort | uniq | head -n 1 >> out/result_files/"$unique_bed_name".gcnv.bed.gz
+        cat "$unique_bed_name"_merged.bed >> out/result_files/"$unique_bed_name".gcnv.bed.gz
+        tabix out/result_files/"$unique_bed_name".gcnv.bed.gz
     done
-    # Check header is in the same order in all files
-    if (( $(cat headers.txt | sort | uniq | wc -l) != 2 )); then 
-        echo "HEADERS DO NOT MATCH"
-        exit 1
-    fi
-    # Add header & copy to result directory
-    cat headers.txt| sort | uniq | tail -n 1 > out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
-    cat headers.txt| sort | uniq | head -n 1 >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
-    cat merged.bed >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
-
-    # TODO run_gcnv_tbis
 
     # Excluded Interbals BED
     excluded_intervals=$( cat outputs/*/"$run_name"_excluded_intervals.bed > out/result_files/"$run_name"_excluded_intervals.bed)
