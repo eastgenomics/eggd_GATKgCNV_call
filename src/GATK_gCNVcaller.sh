@@ -270,17 +270,19 @@ main() {
 
     # Run BEDs & TBIs
     # Concatenate the files
-    #headers=()
-    #for bedfile in $( find outputs/ -name "$run_name"_copy_ratios.gcnv.bed.gz ); do
-    #    headers+=($( zcat $bedfile | head -n 2 ))
-    #    zcat $bedfile | tail -n +3 >> merged_bed
-    #done
+    for bedfile in $( find outputs/ -name "$run_name"_copy_ratios.gcnv.bed.gz ); do
+        echo "$( zcat $bedfile | head -n 2 )" >> headers.txt
+        zcat $bedfile | tail -n +3 >> merged.bed
+    done
+    # Check header is in the same order in all files
+    if (( $(cat headers.txt | sort | uniq | wc -l) != 2 )); then 
+        echo "HEADERS DO NOT MATCH"
+        exit 1
+    fi
     # Add header & copy to result directory
-    #echo ${headers[@]} | uniq > out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
-    #cat merged_bed >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
-    # Sense check the headers are identical (i.e. samples are in the same order & could be concatenated)
-    #echo HEADERS; for i in ${headers[@]}; do echo $i; done | sort | uniq | wc -l
-    # TODO error if the above > 1
+    cat headers.txt| sort | uniq | tail -n 1 > out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
+    cat headers.txt| sort | uniq | head -n 1 >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
+    cat merged.bed >> out/result_files/"$run_name"_copy_ratios.gcnv.bed.gz
 
     # TODO run_gcnv_tbis
 
