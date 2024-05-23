@@ -255,7 +255,7 @@ main() {
         done
     done
 
-    # Merge all the files so there's one per chromosome per sample
+    # Concatenate all the files so there's one per chromosome per sample
     # Interval & Segments VCFs
     for vcf in $(find outputs/ -name *.vcf); do
         bcftools view $vcf -Oz -o "$vcf".gz
@@ -263,7 +263,7 @@ main() {
     done
     mkdir -p out/result_files
     for unique_vcf_name in $( basename -s .vcf.gz $(find outputs/ -name "*.vcf.gz") | sort | uniq ); do
-        bcftools merge outputs/*/"$unique_vcf_name".vcf.gz -Ov -o out/result_files/"$unique_vcf_name".vcf
+        bcftools concat -n outputs/*/"$unique_vcf_name".vcf.gz -Ov -o out/result_files/"$unique_vcf_name".vcf
     done
 
     # Copy Ratio BED files
