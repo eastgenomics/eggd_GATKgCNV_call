@@ -257,9 +257,13 @@ main() {
 
     # Merge all the files so there's one per chromosome per sample
     # Interval & Segments VCFs
+    for vcf in $(find outputs/ -name *.vcf); do
+        bcftools view -Oz -o "$vcf".gz
+        bcftools index "$vcf".gz
+    done
     mkdir -p out/result_files
-    for unique_vcf_name in $( basename -a $(find outputs/ -name *.vcf) | uniq ); do
-        bcftools merge outputs/*/"$unique_vcf_name" > out/result_files/"$unique_vcf_name"
+    for unique_vcf_name in $( basename -s .vcf.gz $(find outputs/ -name "*.vcf.gz") | sort | uniq ); do
+        bcftools merge outputs/*/"$unique_vcf_name".vcf.gz -Ov -o out/result_files/"$unique_vcf_name".vcf
     done
 
     # TODO Sample BEDs & TBIs
