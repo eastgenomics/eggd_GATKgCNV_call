@@ -279,9 +279,10 @@ main() {
             exit 1
         fi
         # Add header & copy to result directory
-        cat "$unique_bed_name"_headers.txt| sort | uniq | tail -n 1 > out/result_files/"$unique_bed_name".gcnv.bed.gz
-        cat "$unique_bed_name"_headers.txt| sort | uniq | head -n 1 >> out/result_files/"$unique_bed_name".gcnv.bed.gz
-        cat "$unique_bed_name"_merged.bed >> out/result_files/"$unique_bed_name".gcnv.bed.gz
+        cat "$unique_bed_name"_headers.txt| sort | uniq | tail -n 1 > out/result_files/"$unique_bed_name".gcnv.bed
+        cat "$unique_bed_name"_headers.txt| sort | uniq | head -n 1 >> out/result_files/"$unique_bed_name".gcnv.bed
+        cat "$unique_bed_name"_merged.bed >> out/result_files/"$unique_bed_name".gcnv.bed
+        bgzip out/result_files/"$unique_bed_name".gcnv.bed
         tabix out/result_files/"$unique_bed_name".gcnv.bed.gz
     done
 
