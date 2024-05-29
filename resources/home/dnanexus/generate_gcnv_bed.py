@@ -58,7 +58,7 @@ def generate_copy_ratio_df(args):
     copy_ratio_df.columns = ['chr', 'start', 'end']
 
     # read all files in and add to copy_ratio_df
-    for file in args.copy_ratios:
+    for file in sorted(args.copy_ratios):
         with open(file, 'r') as fh:
             # add sample name from first line as separate col name to
             # identify rows
