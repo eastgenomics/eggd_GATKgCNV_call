@@ -152,7 +152,7 @@ main() {
             grep ^@ $ints > $chr_ints; grep -P "^$i\t" $ints >> $chr_ints
             chr_tsv=$( dx upload --brief $chr_tsv )
             chr_ints=$( dx upload --brief $chr_ints )
-            job_name='"$i"_cnv_call'
+            job_name='chr"$i"_cnv_call'
             command="dx-jobutil-new-job call_cnvs \
                 -iannotation_tsv='$chr_tsv' -iinterval_list='$chr_ints' \
                 -iGATK_docker='$GATK_docker' \
@@ -161,12 +161,17 @@ main() {
             cnv_call_jobs+=($(eval $command))
         done
     else
+        # TODO make this correct as above
         command="dx-jobutil-new-job call_cnvs -iannotation_tsv=$tsv -iinterval_list=$ints"
         cnv_call_jobs+=($(eval $command))
     fi
 
     # Wait for all subjobs to finish before grabbing outputs
     dx wait "${cnv_call_jobs[@]}"
+
+    # Download cnv_call outputs back to parent
+    dx download -r $DX_WORKSPACE_ID:gCNV-dir
+    mv gCNV-dir/ /home/dnanexus/inputs/
 
     # 5. Run PostprocessGermlineCNVCalls:
     # takes CNV-model in, spits vcfs out
@@ -243,9 +248,14 @@ main() {
 call_cnvs() {
     dx-download-all-inputs
 
+    # Get basecounts
     mkdir -p /home/dnanexus/in/basecounts
     dx download $( dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief )
     mv *hdf5 /home/dnanexus/in/basecounts/
+
+    # Get ploidy calls
+    dx download -r $DX_WORKSPACE_ID:ploidy_dir/ploidy-calls
+    mv ploidy-dir/ /home/dnanexus/in/
 
     # Make basecount batch string
     batch_input=""
