@@ -58,8 +58,16 @@
         "name": "run_name",
         "label": "Name of the run",
         "class": "string",
-        "optional": true,
+        "optional": false,
         "help": "prefix for gCNV.bed and summary files"
+        },
+        {
+        "name": "split_by_chromosome",
+        "label": "Split CNV calling by chromosome",
+        "class": "boolean",
+        "optional": true,
+        "default": false,
+        "help": "boolean switch to enable CNV calling to be performed separately for each chromosome in the case of large captures"
         },
         {
         "name": "CollectReadCounts_args",
@@ -176,7 +184,7 @@
         "aws:eu-central-1": {
         "systemRequirements": {
             "*": {
-            "instanceType": "mem2_ssd1_v2_x8"
+            "instanceType": "mem2_ssd1_v2_x16"
             }
         }
         }
