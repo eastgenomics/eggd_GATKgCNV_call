@@ -65,7 +65,7 @@ main() {
     echo "Running CollectReadCounts for all input bams"
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
-    find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs 8 \
+    find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs 16 \
     'sample_file=$( basename filename ); \
     sample_name="${sample_file%.bam}"; \
     echo $sample_name; \
@@ -191,7 +191,7 @@ main() {
     # triple colon at the end is the parallel way to provide an array of integers
     sample_num=$(ls inputs/bams/*.bam | wc -l)
     index=$(expr $sample_num - 1)
-    parallel --jobs 8 '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
+    parallel --jobs 16 '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         ${PostprocessGermlineCNVCalls_args} \
@@ -207,7 +207,7 @@ main() {
     ' ::: $(seq 0 1 $index)
 
     # 6. Rename output vcf files based on the sample they contain information about
-    find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs 8 ' \
+    find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs 16 ' \
         sample_file=$( basename {} ); file_name="${sample_file%_segments.vcf}"; \
         sample_name=$(bcftools view {} -h | tail -n 1 | cut -f 10 ); \
         mv inputs/vcfs/$file_name"_denoised_copy_ratios.tsv" inputs/vcfs/$sample_name"_denoised_copy_ratios.tsv"; \
@@ -248,13 +248,17 @@ main() {
 call_cnvs() {
     dx-download-all-inputs
 
+    interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
+    annotated_intervals=$( basename $( find /home/dnanexus/in/ -name '*_annotation.tsv' ))
+
     # Get basecounts
     mkdir -p /home/dnanexus/in/basecounts
     dx download $( dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief )
     mv *hdf5 /home/dnanexus/in/basecounts/
 
     # Get ploidy calls
-    dx download -r $DX_WORKSPACE_ID:ploidy_dir/ploidy-calls
+    mkdir ploidy-dir
+    dx download -r $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls -o ploidy-dir/
     mv ploidy-dir/ /home/dnanexus/in/
 
     # Make basecount batch string
@@ -273,15 +277,15 @@ call_cnvs() {
 
     # Run CNV caller
     /usr/bin/time -v docker run -v /home/dnanexus/in/:/data/ $GATK_image gatk GermlineCNVCaller \
-        -L /data/interval_list/*.interval_list -imr OVERLAPPING_ONLY \
-        --annotated-intervals /data/annotation_tsv/*_annotation.tsv \
+        -L /data/interval_list/$interval_list -imr OVERLAPPING_ONLY \
+        --annotated-intervals /data/annotation_tsv/$annotated_intervals \
         --run-mode COHORT \
         $GermlineCNVCaller_args \
         $batch_input \
-        --contig-ploidy-calls /home/dnanexus/in/ploidy-dir/ploidy-calls/ \
+        --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
         --output-prefix CNV \
         -O /data/gCNV-dir
     
     # Upload outputs back to parent
-    dx-upload-all-outputs
+    dx upload -rp /home/dnanexus/in/gCNV-dir
 }
