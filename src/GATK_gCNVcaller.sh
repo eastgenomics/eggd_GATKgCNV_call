@@ -78,12 +78,9 @@ main() {
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     # and another that has the fileIDs for cnv_call subjobs
     batch_input=""
-    #basecount_ids=""
     for base_count in inputs/base_counts/*_basecount.hdf5; do
         sample_file=$( basename $base_count )
         batch_input+="--input /data/base_counts/${sample_file} "
-        #basecount_id=$( dx upload --brief $base_count )
-        #basecount_ids+="-ibasecounts=$basecount_id "
     done
 
     # 2. Run FilterIntervals:
@@ -122,13 +119,7 @@ main() {
         --output-prefix ploidy \
         -O /data/ploidy-dir
     
-    # Make batch list of ploidy fileIDs for cnv_call subjobs
-    #ploidycall_ids=""
-    #for ploidy_call in inputs/ploidy-dir/*; do
-    #    ploidycall_id=$( dx upload --brief $ploidy_call )
-    #    ploidycall_ids+="-iploidycalls=$ploidycall_id "
-    #done
-
+    # Upload preprocess file to workspace container so subjobs can access them
     dx upload -rp /home/dnanexus/inputs/ploidy-dir
     dx upload -rp /home/dnanexus/inputs/base_counts
 
@@ -287,6 +278,6 @@ call_cnvs() {
         -O /data/gCNV-dir
     
     # Upload outputs back to parent
-    dx upload -rp /home/dnanexus/in/gCNV-dir/CNV-calls
-    dx upload -rp /home/dnanexus/in/gCNV-dir/CNV-model
+    dx upload -rp /home/dnanexus/in/gCNV-dir/CNV-calls -o /gCNV-dir/
+    dx upload -rp /home/dnanexus/in/gCNV-dir/CNV-model -o /gCNV-dir/
 }
