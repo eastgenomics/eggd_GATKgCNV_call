@@ -278,6 +278,8 @@ call_cnvs() {
         -O /data/gCNV-dir
     
     # Upload outputs back to parent
-    dx upload -rp /home/dnanexus/in/gCNV-dir/CNV-calls -o /gCNV-dir/
-    dx upload -rp /home/dnanexus/in/gCNV-dir/CNV-model -o /gCNV-dir/
+    mkdir -p out/GermlineCNVCaller/gCNV-dir
+    mv /home/dnanexus/in/gCNV-dir/CNV-calls out/GermlineCNVCaller/gCNV-dir
+    mv /home/dnanexus/in/gCNV-dir/CNV-model out/GermlineCNVCaller/gCNV-dir
+    dx-upload-all-outputs --parallel
 }
