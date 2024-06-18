@@ -149,7 +149,7 @@
         "file": "src/GATK_gCNVcaller.sh",
         "timeoutPolicy": {
         "*": {
-            "hours": 3
+            "hours": 4
         }
         },
         "assetDepends": [
