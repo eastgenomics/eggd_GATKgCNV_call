@@ -76,7 +76,6 @@ main() {
     -O /data/base_counts/${sample_name}_basecount.hdf5'
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
-    # and another that has the fileIDs for cnv_call subjobs
     batch_input=""
     for base_count in inputs/base_counts/*_basecount.hdf5; do
         sample_file=$( basename $base_count )
@@ -123,36 +122,55 @@ main() {
     dx upload -rp /home/dnanexus/inputs/ploidy-dir
     dx upload -rp /home/dnanexus/inputs/base_counts
 
+    # OPTIONAL - split intervals via scatter
+    if [ $split_by_chromosome == 'true' ]; then
+        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListTools \
+        --INPUT /data/beds/filtered.interval_list \
+        --SUBDIVISION_MODE INTERVAL_COUNT \
+        --SCATTER_CONTENT 5000 \
+        --OUTPUT scatter
+    fi
+
     # 4. Run GermlineCNVCaller:
     # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
     # outputs a CNVcalling model and copy ratio files for each sample
     echo "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mark-section "GermlineCNVCaller"
     mkdir inputs/gCNV-dir
-    tsv=/home/dnanexus/inputs/beds/annotated_intervals.tsv
-    ints=/home/dnanexus/inputs/beds/filtered.interval_list
+    tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
     if [ $split_by_chromosome == 'true' ]; then
         # make new intervals files (split by chromosome) & initiate cnv calling in subjobs
-        chroms=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
+        #chroms=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
+        #chroms=( 20 21 22 )
         cnv_call_jobs=()
-        for i in ${chroms[@]}; do
-            echo "Chromosome $i"
-            chr_tsv=/home/dnanexus/inputs/beds/chr"$i"_annotation.tsv
-            chr_ints=/home/dnanexus/inputs/beds/chr"$i".interval_list
-            grep ^@ $tsv > $chr_tsv; grep ^CONTIG $tsv >> $chr_tsv; grep -P "^$i\t" $tsv >> $chr_tsv
-            grep ^@ $ints > $chr_ints; grep -P "^$i\t" $ints >> $chr_ints
-            chr_tsv=$( dx upload --brief $chr_tsv )
-            chr_ints=$( dx upload --brief $chr_ints )
-            job_name='chr"$i"_cnv_call'
+        for i in $( find scatter -name "scattered.interval_list" ); do
+            job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
+            ints=$( dx upload $i )
             command="dx-jobutil-new-job call_cnvs \
-                -iannotation_tsv='$chr_tsv' -iinterval_list='$chr_ints' \
+                -iannotation_tsv='$tsv' -iinterval_list='$ints' \
                 -iGATK_docker='$GATK_docker' \
                 -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
                 --name $job_name"
+
+        #for i in ${chroms[@]}; do
+            #echo "Chromosome $i"
+            #chr_tsv=/home/dnanexus/inputs/beds/chr"$i"_annotation.tsv
+            #chr_ints=/home/dnanexus/inputs/beds/chr"$i".interval_list
+            #grep ^@ $tsv > $chr_tsv; grep ^CONTIG $tsv >> $chr_tsv; grep -P "^$i\t" $tsv >> $chr_tsv
+            #grep ^@ $ints > $chr_ints; grep -P "^$i\t" $ints >> $chr_ints
+            #chr_tsv=$( dx upload --brief $chr_tsv )
+            #chr_ints=$( dx upload --brief $chr_ints )
+            #job_name='chr"$i"_cnv_call'
+            #command="dx-jobutil-new-job call_cnvs \
+            #    -iannotation_tsv='$chr_tsv' -iinterval_list='$chr_ints' \
+            #    -iGATK_docker='$GATK_docker' \
+            #    -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
+            #    --name $job_name"
             cnv_call_jobs+=($(eval $command))
         done
     else
-        # TODO make this correct as above
+        # TODO add normal gatk command within parent job
+        ints=$( dx upload --brief /home/dnanexus/inputs/beds/filtered.interval_list )
         command="dx-jobutil-new-job call_cnvs -iannotation_tsv=$tsv -iinterval_list=$ints"
         cnv_call_jobs+=($(eval $command))
     fi
@@ -161,17 +179,25 @@ main() {
     dx wait "${cnv_call_jobs[@]}"
 
     # Download cnv_call outputs back to parent
-    dx download -r $DX_WORKSPACE_ID:gCNV-dir
+    dx download -r $DX_WORKSPACE_ID:gCNV-dir/
     mv gCNV-dir/ /home/dnanexus/inputs/
+
+    # Make batch input for model & calls shard paths
+    batch_input_postprocess=""
+    for shard_dir in inputs/gCNV-dir/*-model; do
+        prefix=$( basename $shard_dir | cut -d '-' -f1 )
+        batch_input_postprocess+="--calls-shard-path /data/gCNV-dir/$prefix-calls "
+        batch_input_postprocess+="--model-shard-path /data/gCNV-dir/$prefix-model "
+    done
 
     # 5. Run PostprocessGermlineCNVCalls:
     # takes CNV-model in, spits vcfs out
     echo "Running PostprocessGermlineCNVCalls"
     mark-section "PostprocessGermlineCNVCalls"
         # Required Arguments for 4.2.5.0: (4.2 onwards)
-        # --calls-shard-path <File>     List of paths to GermlineCNVCaller call directories.  This argument must be specified atleast once. Required. 
+        # --calls-shard-path <File>     List of paths to GermlineCNVCaller call directories.  This argument must be specified at least once. Required. 
         # --contig-ploidy-calls <File>  Path to contig-ploidy calls directory (output of DetermineGermlineContigPloidy). Required. 
-        # --model-shard-path <File>     List of paths to GermlineCNVCaller model directories.  This argument must be specified atleast once. Required. 
+        # --model-shard-path <File>     List of paths to GermlineCNVCaller model directories.  This argument must be specified at least once. Required. 
         # --output-denoised-copy-ratios <File> Output denoised copy ratio file.  Required. 
         # --output-genotyped-intervals <File>  Output intervals VCF file.  Required. 
         # --output-genotyped-segments <File> Output segments VCF file.  Required. 
@@ -190,8 +216,7 @@ main() {
         --allosomal-contig X \
         --allosomal-contig Y \
         --contig-ploidy-calls /data/ploidy-dir/ploidy-calls \
-        --calls-shard-path /data/gCNV-dir/CNV-calls \
-        --model-shard-path /data/gCNV-dir/CNV-model \
+        ${batch_input_postprocess} \
         --output-genotyped-intervals /data/vcfs/sample_{}_intervals.vcf \
         --output-genotyped-segments /data/vcfs/sample_{}_segments.vcf \
         --output-denoised-copy-ratios /data/vcfs/sample_{}_denoised_copy_ratios.tsv \
@@ -242,6 +267,10 @@ call_cnvs() {
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name '*_annotation.tsv' ))
 
+    # get chromosome name for output prefix
+    #chr=$( basename $interval_list | cut -d '.' -f1 )
+    name=$( cat dnanexus-job.json | jq -r '.name' )
+
     # Get basecounts
     mkdir -p /home/dnanexus/in/basecounts
     dx download $( dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief )
@@ -274,12 +303,12 @@ call_cnvs() {
         $GermlineCNVCaller_args \
         $batch_input \
         --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
-        --output-prefix CNV \
+        --output-prefix $name \
         -O /data/gCNV-dir
     
     # Upload outputs back to parent
     mkdir -p out/GermlineCNVCaller/gCNV-dir
-    mv /home/dnanexus/in/gCNV-dir/CNV-calls out/GermlineCNVCaller/gCNV-dir
-    mv /home/dnanexus/in/gCNV-dir/CNV-model out/GermlineCNVCaller/gCNV-dir
+    mv /home/dnanexus/in/gCNV-dir/$name-calls out/GermlineCNVCaller/gCNV-dir/
+    mv /home/dnanexus/in/gCNV-dir/$name-model out/GermlineCNVCaller/gCNV-dir/
     dx-upload-all-outputs --parallel
 }
