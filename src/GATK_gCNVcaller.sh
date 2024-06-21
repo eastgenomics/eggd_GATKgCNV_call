@@ -128,7 +128,7 @@ main() {
         --INPUT /data/beds/filtered.interval_list \
         --SUBDIVISION_MODE INTERVAL_COUNT \
         --SCATTER_CONTENT 5000 \
-        --OUTPUT scatter
+        --OUTPUT /data/scatter-dir
     fi
 
     # 4. Run GermlineCNVCaller:
@@ -143,13 +143,14 @@ main() {
         #chroms=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
         #chroms=( 20 21 22 )
         cnv_call_jobs=()
-        for i in $( find scatter -name "scattered.interval_list" ); do
+        for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
             job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
-            ints=$( dx upload $i )
+            ints=$( dx upload --brief $i )
             command="dx-jobutil-new-job call_cnvs \
                 -iannotation_tsv='$tsv' -iinterval_list='$ints' \
                 -iGATK_docker='$GATK_docker' \
                 -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
+                --instance-type mem2_ssd1_v2_x8 \
                 --name $job_name"
 
         #for i in ${chroms[@]}; do
@@ -178,9 +179,8 @@ main() {
     # Wait for all subjobs to finish before grabbing outputs
     dx wait "${cnv_call_jobs[@]}"
 
-    # Download cnv_call outputs back to parent
-    dx download -r $DX_WORKSPACE_ID:gCNV-dir/
-    mv gCNV-dir/ /home/dnanexus/inputs/
+    # download all scatter output
+    _get_gCNV_job_outputs
 
     # Make batch input for model & calls shard paths
     batch_input_postprocess=""
@@ -262,10 +262,11 @@ main() {
 }
 
 call_cnvs() {
-    dx-download-all-inputs
+
+    dx-download-all-inputs --parallel
 
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
-    annotated_intervals=$( basename $( find /home/dnanexus/in/ -name '*_annotation.tsv' ))
+    annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
     # get chromosome name for output prefix
     #chr=$( basename $interval_list | cut -d '.' -f1 )
@@ -311,4 +312,48 @@ call_cnvs() {
     mv /home/dnanexus/in/gCNV-dir/$name-calls out/GermlineCNVCaller/gCNV-dir/
     mv /home/dnanexus/in/gCNV-dir/$name-model out/GermlineCNVCaller/gCNV-dir/
     dx-upload-all-outputs --parallel
+
+}
+
+_get_gCNV_job_outputs() {
+    
+    : '''
+    Download output from all gCNV jobs to run final gather step
+
+    Modified from Jethro's _get_scatter_job_outputs function in eggd_tso500
+    '''
+
+    echo "Downloading gCNV job output"
+
+    # wait 60 seconds before trying to download all files, dx download does
+    # not retry downloading files that haven't closed yet and just skips
+    # them (which is not ideal), therefore we will just wait as it should
+    # only take a few seconds for this to happen until dxpy is updated to
+    # actually do proper retries like sane people
+    echo "Waiting 60 seconds to ensure all files are hopefully in a closed state..."
+    sleep 60
+
+    SECONDS=0
+    set +x  # suppress this going to the logs as its long
+
+    # files from sub jobs will be in the container- project context of the
+    # current job ($DX_WORKSPACE-id) => search here for  all the files
+    gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV-dir")
+
+    # turn describe output into id:/path/to/file to download with dir structure
+    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $gCNV_files)
+
+    # build aggregated directory structure and download all files
+    cmds=$(for f in  $files; do \
+        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
+        echo "'mkdir -p inputs/$dir && dx download --no-progress $id -o inputs/$path'"; done)
+
+    echo $cmds | xargs -n1 -P${THREADS} bash -c
+
+    set -x
+
+    total=$(du -sh /home/dnanexus/inputs/gCNV-dir/ | cut -f1)
+    duration=$SECONDS
+    echo "Downloaded $(wc -w <<< ${files}) files (${total}) in $(($duration / 60))m$(($duration % 60))s"
+    
 }
