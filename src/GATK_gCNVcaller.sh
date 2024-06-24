@@ -68,7 +68,7 @@ main() {
     echo "Running CollectReadCounts for all input bams"
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
-    find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs 16 \
+    find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs $THREADS \
     'sample_file=$( basename filename ); \
     sample_name="${sample_file%.bam}"; \
     echo $sample_name; \
@@ -150,7 +150,7 @@ main() {
                 -iannotation_tsv='$tsv' -iinterval_list='$ints' \
                 -iGATK_docker='$GATK_docker' \
                 -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
-                --instance-type mem2_ssd1_v2_x16 \
+                --instance-type mem2_ssd1_v2_x8 \
                 --name $job_name"
             cnv_call_jobs+=($(eval $command))
         done
@@ -193,7 +193,7 @@ main() {
     # triple colon at the end is the parallel way to provide an array of integers
     sample_num=$(ls inputs/bams/*.bam | wc -l)
     index=$(expr $sample_num - 1)
-    parallel --jobs 16 '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
+    parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         '"$PostprocessGermlineCNVCalls_args"' \
@@ -208,7 +208,7 @@ main() {
     ' ::: $(seq 0 1 $index)
 
     # 6. Rename output vcf files based on the sample they contain information about
-    find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs 16 ' \
+    find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs $THREADS ' \
         sample_file=$( basename {} ); file_name="${sample_file%_segments.vcf}"; \
         sample_name=$(bcftools view {} -h | tail -n 1 | cut -f 10 ); \
         mv inputs/vcfs/$file_name"_denoised_copy_ratios.tsv" inputs/vcfs/$sample_name"_denoised_copy_ratios.tsv"; \
