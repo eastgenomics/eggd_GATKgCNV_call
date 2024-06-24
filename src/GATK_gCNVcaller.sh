@@ -17,6 +17,9 @@ main() {
     pip install -q pytz-* python_dateutil-* pysam-* numpy-* pandas-* pybedtools-* PyVCF-*
     cd ..
 
+    # control how many operations to open in parallel for download / upload
+    THREADS=$(nproc --all)
+
     # Load the GATK docker image
     mark-section "Loading GATK Docker image"
     dx download "$GATK_docker" -o GATK.tar.gz
@@ -72,7 +75,7 @@ main() {
     /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data $GATK_image gatk CollectReadCounts \
     -I /data/bams/${sample_file} \
     -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
-    ${CollectReadCounts_args} \
+    '"$CollectReadCounts_args"' \
     -O /data/base_counts/${sample_name}_basecount.hdf5'
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
@@ -139,9 +142,6 @@ main() {
     mkdir inputs/gCNV-dir
     tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
     if [ $split_by_chromosome == 'true' ]; then
-        # make new intervals files (split by chromosome) & initiate cnv calling in subjobs
-        #chroms=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
-        #chroms=( 20 21 22 )
         cnv_call_jobs=()
         for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
             job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
@@ -150,23 +150,8 @@ main() {
                 -iannotation_tsv='$tsv' -iinterval_list='$ints' \
                 -iGATK_docker='$GATK_docker' \
                 -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
-                --instance-type mem2_ssd1_v2_x8 \
+                --instance-type mem2_ssd1_v2_x16 \
                 --name $job_name"
-
-        #for i in ${chroms[@]}; do
-            #echo "Chromosome $i"
-            #chr_tsv=/home/dnanexus/inputs/beds/chr"$i"_annotation.tsv
-            #chr_ints=/home/dnanexus/inputs/beds/chr"$i".interval_list
-            #grep ^@ $tsv > $chr_tsv; grep ^CONTIG $tsv >> $chr_tsv; grep -P "^$i\t" $tsv >> $chr_tsv
-            #grep ^@ $ints > $chr_ints; grep -P "^$i\t" $ints >> $chr_ints
-            #chr_tsv=$( dx upload --brief $chr_tsv )
-            #chr_ints=$( dx upload --brief $chr_ints )
-            #job_name='chr"$i"_cnv_call'
-            #command="dx-jobutil-new-job call_cnvs \
-            #    -iannotation_tsv='$chr_tsv' -iinterval_list='$chr_ints' \
-            #    -iGATK_docker='$GATK_docker' \
-            #    -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
-            #    --name $job_name"
             cnv_call_jobs+=($(eval $command))
         done
     else
@@ -211,12 +196,12 @@ main() {
     parallel --jobs 16 '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
-        ${PostprocessGermlineCNVCalls_args} \
+        '"$PostprocessGermlineCNVCalls_args"' \
         --autosomal-ref-copy-number 2 \
         --allosomal-contig X \
         --allosomal-contig Y \
         --contig-ploidy-calls /data/ploidy-dir/ploidy-calls \
-        ${batch_input_postprocess} \
+        '"$batch_input_postprocess"' \
         --output-genotyped-intervals /data/vcfs/sample_{}_intervals.vcf \
         --output-genotyped-segments /data/vcfs/sample_{}_segments.vcf \
         --output-denoised-copy-ratios /data/vcfs/sample_{}_denoised_copy_ratios.tsv \
@@ -269,7 +254,6 @@ call_cnvs() {
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
     # get chromosome name for output prefix
-    #chr=$( basename $interval_list | cut -d '.' -f1 )
     name=$( cat dnanexus-job.json | jq -r '.name' )
 
     # Get basecounts
@@ -316,20 +300,12 @@ call_cnvs() {
 }
 
 _get_gCNV_job_outputs() {
-    
-    : '''
-    Download output from all gCNV jobs to run final gather step
 
-    Modified from Jethro's _get_scatter_job_outputs function in eggd_tso500
-    '''
+    # Download output from all gCNV jobs to run final gather step
+    # Modified from Jethro's _get_scatter_job_outputs function in eggd_tso500
 
     echo "Downloading gCNV job output"
 
-    # wait 60 seconds before trying to download all files, dx download does
-    # not retry downloading files that haven't closed yet and just skips
-    # them (which is not ideal), therefore we will just wait as it should
-    # only take a few seconds for this to happen until dxpy is updated to
-    # actually do proper retries like sane people
     echo "Waiting 60 seconds to ensure all files are hopefully in a closed state..."
     sleep 60
 
