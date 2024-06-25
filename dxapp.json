@@ -62,12 +62,12 @@
         "help": "prefix for gCNV.bed and summary files"
         },
         {
-        "name": "split_by_chromosome",
-        "label": "Split CNV calling by chromosome",
+        "name": "scatter",
+        "label": "Split CNV calling into subjobs",
         "class": "boolean",
         "optional": true,
         "default": false,
-        "help": "boolean switch to enable CNV calling to be performed separately for each chromosome in the case of large captures"
+        "help": "boolean switch to enable CNV calling to be scattered across subjobs in the case of large captures"
         },
         {
         "name": "CollectReadCounts_args",

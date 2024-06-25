@@ -120,19 +120,6 @@ main() {
         --contig-ploidy-priors /data/prior_prob.tsv \
         --output-prefix ploidy \
         -O /data/ploidy-dir
-    
-    # Upload preprocess file to workspace container so subjobs can access them
-    dx upload -rp /home/dnanexus/inputs/ploidy-dir
-    dx upload -rp /home/dnanexus/inputs/base_counts
-
-    # OPTIONAL - split intervals via scatter
-    if [ $split_by_chromosome == 'true' ]; then
-        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListTools \
-        --INPUT /data/beds/filtered.interval_list \
-        --SUBDIVISION_MODE INTERVAL_COUNT \
-        --SCATTER_CONTENT 5000 \
-        --OUTPUT /data/scatter-dir
-    fi
 
     # 4. Run GermlineCNVCaller:
     # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
@@ -140,8 +127,18 @@ main() {
     echo "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mark-section "GermlineCNVCaller"
     mkdir inputs/gCNV-dir
-    tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
-    if [ $split_by_chromosome == 'true' ]; then
+    if [ $scatter == 'true' ]; then
+        # Scatter intervals if required
+        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListTools \
+            --INPUT /data/beds/filtered.interval_list \
+            --SUBDIVISION_MODE INTERVAL_COUNT \
+            --SCATTER_CONTENT 5000 \
+            --OUTPUT /data/scatter-dir
+        # Upload input files to workspace container so subjobs can access them
+        tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
+        dx upload -rp /home/dnanexus/inputs/ploidy-dir
+        dx upload -rp /home/dnanexus/inputs/base_counts
+        # Call CNVs via subjobs on scattered intervals
         cnv_call_jobs=()
         for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
             job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
@@ -154,18 +151,22 @@ main() {
                 --name $job_name"
             cnv_call_jobs+=($(eval $command))
         done
+        # Wait for all subjobs to finish before grabbing outputs
+        dx wait "${cnv_call_jobs[@]}"
+        # download all scatter output
+        _get_gCNV_job_outputs
     else
-        # TODO add normal gatk command within parent job
-        ints=$( dx upload --brief /home/dnanexus/inputs/beds/filtered.interval_list )
-        command="dx-jobutil-new-job call_cnvs -iannotation_tsv=$tsv -iinterval_list=$ints"
-        cnv_call_jobs+=($(eval $command))
+        # Set off cnv_calling together in the parent job
+        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk GermlineCNVCaller \
+            -L /data/beds/filtered.interval_list -imr OVERLAPPING_ONLY \
+            --annotated-intervals /data/beds/annotated_intervals.tsv \
+            --run-mode COHORT \
+            $GermlineCNVCaller_args \
+            $batch_input \
+            --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
+            --output-prefix CNV \
+            -O /data/gCNV-dir
     fi
-
-    # Wait for all subjobs to finish before grabbing outputs
-    dx wait "${cnv_call_jobs[@]}"
-
-    # download all scatter output
-    _get_gCNV_job_outputs
 
     # Make batch input for model & calls shard paths
     batch_input_postprocess=""
@@ -291,7 +292,7 @@ call_cnvs() {
         --output-prefix $name \
         -O /data/gCNV-dir
     
-    # Upload outputs back to parent
+    # Upload outputs back to parent (only upload those required for next steps)
     mkdir -p out/GermlineCNVCaller/gCNV-dir
     mv /home/dnanexus/in/gCNV-dir/$name-calls out/GermlineCNVCaller/gCNV-dir/
     mv /home/dnanexus/in/gCNV-dir/$name-model out/GermlineCNVCaller/gCNV-dir/
