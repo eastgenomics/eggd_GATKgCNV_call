@@ -3,7 +3,7 @@
     "title": "GATKgCNV_call",
     "summary": "GATK gCNV germline CNV caller",
     "dxapi": "1.0.0",
-    "version": "1.0.2",
+    "version": "2.0.0",
     "inputSpec": [
         {
         "name": "GATK_docker",
@@ -28,7 +28,7 @@
         },
         {
         "name": "interval_list",
-        "label": "target interval list",
+        "label": "Target interval list",
         "class": "file",
         "optional": false,
         "patterns": ["*.interval_list"],
@@ -38,11 +38,11 @@
             "path": "/assets/GATK/gCNV_inputs/"
             }
         ],
-        "help": "interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
+        "help": "Interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
         },
         {
         "name": "annotation_tsv",
-        "label": "annotation for the intervals list",
+        "label": "Annotation for the intervals list",
         "class": "file",
         "optional": false,
         "patterns": ["*.tsv"],
@@ -52,14 +52,14 @@
             "path": "/assets/GATK/gCNV_inputs/"
             }
         ],
-        "help": "contains GC content, mappability and other annotation of target intervals"
+        "help": "Contains GC content, mappability and other annotation of target intervals"
         },
         {
         "name": "run_name",
         "label": "Name of the run",
         "class": "string",
         "optional": false,
-        "help": "prefix for gCNV.bed and summary files"
+        "help": "Prefix for gCNV.bed and summary files"
         },
         {
         "name": "scatter",
@@ -67,47 +67,55 @@
         "class": "boolean",
         "optional": true,
         "default": false,
-        "help": "boolean switch to enable CNV calling to be scattered across subjobs in the case of large captures"
+        "help": "Boolean switch to enable CNV calling to be scattered across subjobs in the case of large captures"
+        },
+        {
+        "name": "scatter_count",
+        "label": "Number of intervals per scatter job",
+        "class": "int",
+        "optional": true,
+        "default": 5000,
+        "help": "The number of intervals required in each scattered subjob (default: 5000)"
         },
         {
         "name": "CollectReadCounts_args",
-        "label": "optional parameters for CollectReadCounts",
+        "label": "Optional parameters for CollectReadCounts",
         "class": "string",
         "optional": true,
         "default": "",
-        "help": "eg  '--format TSV', default is HDF5"
+        "help": "E.g.  '--format TSV', default is HDF5"
         },
         {
         "name": "FilterIntervals_args",
-        "label": "optional parameters for FilterIntervals",
+        "label": "Optional parameters for FilterIntervals",
         "class": "string",
         "optional": true,
         "default": " --minimum-gc-content 0.1 --maximum-gc-content 0.9 --minimum-mappability 0.9 --maximum-mappability 1.0 --low-count-filter-count-threshold 5 --low-count-filter-percentage-of-samples 90.0",
-        "help": "optional command line arguments for FilterIntervals"
+        "help": "Optional command line arguments for FilterIntervals"
         },
         {
         "name": "DetermineGermlineContigPloidy_args",
-        "label": "optional parameters for DetermineGermlineContigPloidy",
+        "label": "Optional parameters for DetermineGermlineContigPloidy",
         "class": "string",
         "optional": true,
         "default": "",
-        "help": "optional command line arguments for DetermineGermlineContigPloidy"
+        "help": "Optional command line arguments for DetermineGermlineContigPloidy"
         },
         {
         "name": "GermlineCNVCaller_args",
-        "label": "optional parameters for GermlineCNVCaller",
+        "label": "Optional parameters for GermlineCNVCaller",
         "class": "string",
         "optional": true,
         "default": "",
-        "help": "optional command line arguments for GermlineCNVCaller"
+        "help": "Optional command line arguments for GermlineCNVCaller"
         },
         {
         "name": "PostprocessGermlineCNVCalls_args",
-        "label": "optional parameters for PostprocessGermlineCNVCalls",
+        "label": "Optional parameters for PostprocessGermlineCNVCalls",
         "class": "string",
         "optional": true,
         "default": "",
-        "help": "optional command line arguments for PostprocessGermlineCNVCalls"
+        "help": "Optional command line arguments for PostprocessGermlineCNVCalls"
         },
         {
         "name": "debug_fail_start",
@@ -137,7 +145,7 @@
     "outputSpec": [
         {
         "name": "result_files",
-        "label": "sample CNV vcfs, copy ratio files and run-level annotation and visualisation files",
+        "label": "Sample CNV vcfs, copy ratio files and run-level annotation and visualisation files",
         "class": "array:file"
         }
     ],
@@ -147,6 +155,7 @@
         "version": "0",
         "interpreter": "bash",
         "file": "src/GATK_gCNVcaller.sh",
+        "headJobOnDemand": true,
         "timeoutPolicy": {
         "*": {
             "hours": 4
@@ -175,10 +184,7 @@
     ],
     "access": {
         "allProjects": "VIEW",
-        "project": "CONTRIBUTE",
-        "network": [
-        "*"
-        ]
+        "project": "CONTRIBUTE"
     },
     "regionalOptions": {
         "aws:eu-central-1": {

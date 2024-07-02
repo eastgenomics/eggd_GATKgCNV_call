@@ -7,6 +7,10 @@
 # Exit at any point if there is any error and output each line as it is executed (for debugging)
 set -e -x -o pipefail
 
+# set frequency of instance usage in logs to 30 seconds
+kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
+/usr/bin/dx-dstat 30
+
 main() {
 
     mark-section "Installing packages"
@@ -15,7 +19,7 @@ main() {
     sudo dpkg -i parallel*.deb
     cd packages
     pip install -q pytz-* python_dateutil-* pysam-* numpy-* pandas-* pybedtools-* PyVCF-*
-    cd ..
+    cd /home/dnanexus
 
     # control how many operations to open in parallel for download / upload
     THREADS=$(nproc --all)
@@ -44,20 +48,18 @@ main() {
         mv prior_prob.tsv inputs/
     fi
 
-    cd inputs
-    mkdir beds
+    mkdir -p inputs/beds
     mark-section "Downloading interval files"
     # Intervals file (preprocessed bed from GATK_prep)
-    dx download "$interval_list" -o beds/preprocessed.interval_list
+    dx download "$interval_list" -o inputs/beds/preprocessed.interval_list
     # Annotation tsv (from GATK_prep)
-    dx download "$annotation_tsv" -o beds/annotated_intervals.tsv
+    dx download "$annotation_tsv" -o inputs/beds/annotated_intervals.tsv
 
-    mkdir bams
+    mkdir -p inputs/bams
     ## Download all input bam and bai files
     mark-section "Downloading input bam & bai files"
-    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | xargs -n1 -P$(nproc --all) dx download --no-progress -o bams/
+    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
 
-    cd /home/dnanexus
     echo "All input files have downloaded to inputs/"
 
     # Optional to hold job after downloading all input files
@@ -127,12 +129,13 @@ main() {
     echo "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mark-section "GermlineCNVCaller"
     mkdir inputs/gCNV-dir
-    if [ $scatter == 'true' ]; then
+    total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
+    if [ $scatter == 'true' -a $scatter_count -lt $total_intervals ]; then
         # Scatter intervals if required
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListTools \
             --INPUT /data/beds/filtered.interval_list \
             --SUBDIVISION_MODE INTERVAL_COUNT \
-            --SCATTER_CONTENT 5000 \
+            --SCATTER_CONTENT $scatter_count \
             --OUTPUT /data/scatter-dir
         # Upload input files to workspace container so subjobs can access them
         tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
@@ -259,13 +262,11 @@ call_cnvs() {
 
     # Get basecounts
     mkdir -p /home/dnanexus/in/basecounts
-    dx download $( dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief )
-    mv *hdf5 /home/dnanexus/in/basecounts/
+    dx download $( dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief ) -o /home/dnanexus/in/basecounts/
 
     # Get ploidy calls
-    mkdir ploidy-dir
-    dx download -r $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls -o ploidy-dir/
-    mv ploidy-dir/ /home/dnanexus/in/
+    mkdir -p /home/dnanexus/in/ploidy-dir
+    dx download -r $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls -o /home/dnanexus/in/ploidy-dir/
 
     # Make basecount batch string
     batch_input=""
