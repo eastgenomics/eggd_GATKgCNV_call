@@ -7,6 +7,10 @@
 # Exit at any point if there is any error and output each line as it is executed (for debugging)
 set -e -x -o pipefail
 
+# prefixes all lines of commands written to stdout with datetime
+PS4='\000[$(date)]\011'
+export TZ=Europe/London
+
 # set frequency of instance usage in logs to 30 seconds
 kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 /usr/bin/dx-dstat 30
@@ -17,9 +21,7 @@ main() {
     echo "Installing packages"
     sudo dpkg -i sysstat*.deb
     sudo dpkg -i parallel*.deb
-    cd packages
-    pip install -q pytz-* python_dateutil-* pysam-* numpy-* pandas-* pybedtools-* PyVCF-*
-    cd /home/dnanexus
+    sudo -H python3 -m pip install --no-index --no-deps packages/*
 
     # control how many operations to open in parallel for download / upload
     THREADS=$(nproc --all)
@@ -58,7 +60,11 @@ main() {
     mkdir -p inputs/bams
     ## Download all input bam and bai files
     mark-section "Downloading input bam & bai files"
+    SECONDS=0
     echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
+    duration=$SECONDS
+    total=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
+    echo "Downloaded $(wc -w <<< "$file_ids") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 
     echo "All input files have downloaded to inputs/"
 
@@ -71,14 +77,14 @@ main() {
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
     find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs $THREADS \
-    'sample_file=$( basename filename ); \
-    sample_name="${sample_file%.bam}"; \
-    echo $sample_name; \
-    /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data $GATK_image gatk CollectReadCounts \
-    -I /data/bams/${sample_file} \
-    -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
-    '"$CollectReadCounts_args"' \
-    -O /data/base_counts/${sample_name}_basecount.hdf5'
+        'sample_file=$( basename filename ); \
+        sample_name="${sample_file%.bam}"; \
+        echo $sample_name; \
+        /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data $GATK_image gatk CollectReadCounts \
+        -I /data/bams/${sample_file} \
+        -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
+        '"$CollectReadCounts_args"' \
+        -O /data/base_counts/${sample_name}_basecount.hdf5'
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     batch_input=""
@@ -235,8 +241,9 @@ main() {
     # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
     echo "Generating gcnv bed files for all sample copy ratios"
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
-    python3 generate_gcnv_bed.py --copy_ratios "$denoised_copy_ratio_files" -s \
-    --run "$run_name"
+    python3 generate_gcnv_bed.py \
+        --copy_ratios "$denoised_copy_ratio_files" \
+        -s --run "$run_name"
 
     mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
     mv ./*.gcnv.bed.gz* "${vis_dir}"/
@@ -246,7 +253,10 @@ main() {
     if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
     # Upload output files
+     SECONDS=0
     dx-upload-all-outputs --parallel
+    duration=$SECONDS
+    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
 
 }
 
