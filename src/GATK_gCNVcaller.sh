@@ -136,34 +136,35 @@ main() {
     mark-section "GermlineCNVCaller"
     mkdir inputs/gCNV-dir
     total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
-    if [ $scatter == 'true' -a $scatter_count -lt $total_intervals ]; then
+    if [ $scatter_by_interval_count == 'true' -a $scatter_count -lt $total_intervals ]; then
         # Scatter intervals if required
+        echo "Scattering intervals into sublists of approximately $scatter_count"
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListTools \
             --INPUT /data/beds/filtered.interval_list \
             --SUBDIVISION_MODE INTERVAL_COUNT \
             --SCATTER_CONTENT $scatter_count \
             --OUTPUT /data/scatter-dir
-        # Upload input files to workspace container so subjobs can access them
-        tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
-        dx upload -rp /home/dnanexus/inputs/ploidy-dir
-        dx upload -rp /home/dnanexus/inputs/base_counts
-        # Call CNVs via subjobs on scattered intervals
-        cnv_call_jobs=()
-        for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
-            job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
-            ints=$( dx upload --brief $i )
-            command="dx-jobutil-new-job call_cnvs \
-                -iannotation_tsv='$tsv' -iinterval_list='$ints' \
-                -iGATK_docker='$GATK_docker' \
-                -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
-                --instance-type mem2_ssd1_v2_x8 \
-                --name $job_name"
-            cnv_call_jobs+=($(eval $command))
+        # Set off subjobs
+        set_off_subjobs
+    elif [ $scatter_by_chromosome == 'true' ]; then
+        # Scatter by chromosome
+        echo "Scattering intervals by chromosome"
+        chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
+        ints=/home/dnanexus/inputs/beds/filtered.interval_list
+        for i in ${chromosomes[@]}; do
+            echo "Chromosome $i"
+            mkdir -p /home/dnanexus/inputs/scatter-dir/chr"$i"
+            chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
+            # Skip chromosome if no intervals present
+            if [[ ! "$( grep -P '^'$i'\t' $ints )" ]]; then
+                echo "No intervals found for Chromosome $i, skipping..."
+                continue
+            fi
+            # Collect header & relevant lines
+            grep ^@ $ints > $chr_ints; grep -P "^$i\t" $ints >> $chr_ints
         done
-        # Wait for all subjobs to finish before grabbing outputs
-        dx wait "${cnv_call_jobs[@]}"
-        # download all scatter output
-        _get_gCNV_job_outputs
+        # Set off subjobs
+        set_off_subjobs
     else
         # Set off cnv_calling together in the parent job
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk GermlineCNVCaller \
@@ -309,6 +310,39 @@ call_cnvs() {
     mv /home/dnanexus/in/gCNV-dir/$name-model out/GermlineCNVCaller/gCNV-dir/
     dx-upload-all-outputs --parallel
 
+}
+
+set_off_subjobs() {
+    # Upload input files to workspace container so subjobs can access them
+    tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
+    dx upload -rp /home/dnanexus/inputs/ploidy-dir
+    dx upload -rp /home/dnanexus/inputs/base_counts
+    # Call CNVs via subjobs on scattered intervals
+    cnv_call_jobs=()
+    for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
+        job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
+        ints=$( dx upload --brief $i )
+        # Bump instance type up for large interval lists
+        interval_num=$(grep -v ^@ $i | wc -l)
+        if [ $interval_num -gt 15000 ]; then
+            instance=mem2_ssd1_v2_x32
+        elif [ $interval_num -gt 10000 ]; then
+            instance=mem2_ssd1_v2_x16
+        else
+            instance=mem2_ssd1_v2_x8
+        fi
+        command="dx-jobutil-new-job call_cnvs \
+            -iannotation_tsv='$tsv' -iinterval_list='$ints' \
+            -iGATK_docker='$GATK_docker' \
+            -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
+            --instance-type $instance \
+            --name $job_name"
+        cnv_call_jobs+=($(eval $command))
+    done
+    # Wait for all subjobs to finish before grabbing outputs
+    dx wait "${cnv_call_jobs[@]}"
+    # download all scatter output
+    _get_gCNV_job_outputs
 }
 
 _get_gCNV_job_outputs() {

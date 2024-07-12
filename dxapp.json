@@ -62,12 +62,20 @@
         "help": "Prefix for gCNV.bed and summary files"
         },
         {
-        "name": "scatter",
-        "label": "Split CNV calling into subjobs",
+        "name": "scatter_by_interval_count",
+        "label": "Split CNV calling into equal subjobs",
         "class": "boolean",
         "optional": true,
         "default": false,
-        "help": "Boolean switch to enable CNV calling to be scattered across subjobs in the case of large captures"
+        "help": "Boolean switch to enable CNV calling to be scattered equally across subjobs in the case of large captures"
+        },
+        {
+        "name": "scatter_by_chromosome",
+        "label": "Split CNV calling into chromosome subjobs",
+        "class": "boolean",
+        "optional": true,
+        "default": false,
+        "help": "Boolean switch to enable CNV calling to be scattered by chromosome across subjobs in the case of large captures"
         },
         {
         "name": "scatter_count",
@@ -155,10 +163,10 @@
         "version": "0",
         "interpreter": "bash",
         "file": "src/GATK_gCNVcaller.sh",
-        "headJobOnDemand": true,
+        "priority": "high",
         "timeoutPolicy": {
         "*": {
-            "hours": 4
+            "hours": 24
         }
         },
         "assetDepends": [
