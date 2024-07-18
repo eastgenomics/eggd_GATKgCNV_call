@@ -163,7 +163,7 @@
         "version": "0",
         "interpreter": "bash",
         "file": "src/GATK_gCNVcaller.sh",
-        "priority": "high",
+        "headJobOnDemand": true,
         "timeoutPolicy": {
         "*": {
             "hours": 24
