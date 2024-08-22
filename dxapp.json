@@ -166,7 +166,7 @@
         "headJobOnDemand": true,
         "timeoutPolicy": {
         "*": {
-            "hours": 24
+            "hours": 12
         }
         },
         "assetDepends": [
