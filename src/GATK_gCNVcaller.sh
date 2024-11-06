@@ -181,7 +181,7 @@ main() {
 
         # Set off subjobs
         set_off_subjobs
-    elif [ "$scatter_by_chromosome" == 'true' ]; then
+    elif [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
         ints=/home/dnanexus/inputs/beds/filtered.interval_list
@@ -200,11 +200,15 @@ main() {
                 echo "No intervals found for Chromosome $i, skipping..."
                 continue
             fi
+
             # Collect header & relevant lines
             grep ^@ $ints > $chr_ints
             grep -P "^$i\t" $ints >> $chr_ints
         done
+
+        # TODO - remove this, added to allow buffering of large no. log lines to not get truncated
         sleep 20
+
         # Set off subjobs
         set_off_subjobs
     else
