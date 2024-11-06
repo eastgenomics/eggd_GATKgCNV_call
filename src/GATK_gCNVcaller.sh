@@ -150,8 +150,8 @@ main() {
         "$GATK_image" gatk DetermineGermlineContigPloidy \
         -L /data/beds/filtered.interval_list \
         -imr OVERLAPPING_ONLY \
-        "$DetermineGermlineContigPloidy_args" \
-        "$batch_input" \
+        $DetermineGermlineContigPloidy_args \
+        $batch_input \
         --contig-ploidy-priors /data/prior_prob.tsv \
         --output-prefix ploidy \
         -O /data/ploidy-dir \
