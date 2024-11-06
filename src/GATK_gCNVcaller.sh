@@ -151,10 +151,11 @@ main() {
         echo "Scattering intervals by chromosome"
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
         ints=/home/dnanexus/inputs/beds/filtered.interval_list
-        for i in ${chromosomes[@]}; do
+        for i in "${chromosomes[@]}"; do
             echo "Chromosome $i"
             mkdir -p /home/dnanexus/inputs/scatter-dir/chr"$i"
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
+
             # Skip chromosome if no intervals present
             if [[ ! "$( grep -P '^'$i'\t' $ints )" ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
@@ -261,6 +262,33 @@ main() {
 
 }
 
+_upload_single_file() {
+    : '''
+    Uploads single file with dx upload and associates uploaded
+    file ID to specified output field
+
+    Arguments
+    ---------
+        1 : str
+            path and file to upload
+        2 : str
+            app output field to link the uploaded file to
+        3 : bool
+            (optional) controls if to link output file to job output spec
+    '''
+    local file=$1
+    local field=$2
+    local link=$3
+
+    local remote_path=$(sed s'/\/home\/dnanexus\/out\///' <<< "$file")
+
+    file_id=$(dx upload "$file" --path "$remote_path" --parents --brief)
+
+    if [[ "$link" == true ]]; then
+        dx-jobutil-add-output "$field" "$file_id" --array
+    fi
+}
+
 call_cnvs() {
 
     dx-download-all-inputs --parallel
@@ -303,32 +331,50 @@ call_cnvs() {
         --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
         --output-prefix $name \
         -O /data/gCNV-dir
-    
+
     # Upload outputs back to parent (only upload those required for next steps)
     mkdir -p out/GermlineCNVCaller/gCNV-dir
-    mv /home/dnanexus/in/gCNV-dir/$name-calls out/GermlineCNVCaller/gCNV-dir/
-    mv /home/dnanexus/in/gCNV-dir/$name-model out/GermlineCNVCaller/gCNV-dir/
+    mv /home/dnanexus/in/gCNV-dir/$name-calls out/inputs/GermlineCNVCaller/gCNV-dir/
+    mv /home/dnanexus/in/gCNV-dir/$name-model out/inputs/GermlineCNVCaller/gCNV-dir/
+
+    cores=$(nproc --all)
+    total_files=$(find out/ -type f | wc -l)
+    total_size=$(du -sh out/)
+
     SECONDS=0
-    dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-calls --path /home/dnanexus/inputs/gCNV-dir
-    dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-model --path /home/dnanexus/inputs/gCNV-dir
+    echo "Uploading sample output"
+    export -f _upload_single_file  # required to be accessible to xargs sub shell
+
+    find /home/dnanexus/out/ -type f | xargs -P ${cores} -n1 -I{} bash -c \
+        "_upload_single_file {} _ false"
+
+    # dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-calls --path /home/dnanexus/inputs/gCNV-dir
+    # dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-model --path /home/dnanexus/inputs/gCNV-dir
     #dx-upload-all-outputs --parallel
     #find "/home/dnanexus/out/demultiplexOutput/" -type f | xargs -P ${UPLOAD_THREADS} -n1 -I{} bash -c \
     #      "dx upload "$file" --path "$remote_path" --parents --brief"
     duration=$SECONDS
-    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
+    echo "Uploaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
 
 }
 
 set_off_subjobs() {
     # Upload input files to workspace container so subjobs can access them
     tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
+
+    SECONDS=0
+    echo "Uploading polidy and base counts for sub jobs"
+
     dx upload -rp /home/dnanexus/inputs/ploidy-dir
     dx upload -rp /home/dnanexus/inputs/base_counts
-    # Call CNVs via subjobs on scattered intervals
-    cnv_call_jobs=()
+
+    duration=$SECONDS
+    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
+
     for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
         job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
         ints=$( dx upload --brief $i )
+
         # Bump instance type up for large interval lists
         interval_num=$(grep -v ^@ $i | wc -l)
         if [ $interval_num -gt 15000 ]; then
@@ -336,19 +382,22 @@ set_off_subjobs() {
         elif [ $interval_num -gt 10000 ]; then
             instance=mem2_ssd1_v2_x16
         else
-            instance=mem2_ssd1_v2_x8
+            instance=mem2_ssd2_v2_x8
         fi
-        command="dx-jobutil-new-job call_cnvs \
-            -iannotation_tsv='$tsv' -iinterval_list='$ints' \
+
+        dx-jobutil-new-job call_cnvs \
+            -iannotation_tsv='$tsv' \
+            -iinterval_list='$ints' \
             -iGATK_docker='$GATK_docker' \
             -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
             --instance-type $instance \
-            --extra-args='{\"priority\": \"high\"}' \
-            --name $job_name"
-        cnv_call_jobs+=($(eval $command))
+            --extra-args='{"priority": "high"}' \
+            --name "$job_name" >> job_ids
     done
+
     # Wait for all subjobs to finish before grabbing outputs
-    dx wait "${cnv_call_jobs[@]}"
+    dx wait --from-file job_ids
+
     # download all scatter output
     _get_gCNV_job_outputs
 }
@@ -360,8 +409,8 @@ _get_gCNV_job_outputs() {
 
     echo "Downloading gCNV job output"
 
-    echo "Waiting 60 seconds to ensure all files are hopefully in a closed state..."
-    sleep 60
+    echo "Waiting 30 seconds to ensure all files are hopefully in a closed state..."
+    sleep 30
 
     SECONDS=0
     set +x  # suppress this going to the logs as its long
@@ -385,5 +434,5 @@ _get_gCNV_job_outputs() {
     total=$(du -sh /home/dnanexus/inputs/gCNV-dir/ | cut -f1)
     duration=$SECONDS
     echo "Downloaded $(wc -w <<< ${files}) files (${total}) in $(($duration / 60))m$(($duration % 60))s"
-    
+
 }
