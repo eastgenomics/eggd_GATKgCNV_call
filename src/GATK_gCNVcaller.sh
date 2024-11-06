@@ -76,12 +76,12 @@ main() {
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
 
+    SECONDS=0
     find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs $THREADS \
         'sample_file=$( basename filename ); \
         sample_name="${sample_file%.bam}"; \
-        echo $sample_name; \
-        /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data \
-        $GATK_image gatk CollectReadCounts \
+        sudo docker run -v /home/dnanexus/inputs:/data \
+        "$GATK_image" gatk CollectReadCounts \
         -verbosity WARNING \
         -I /data/bams/${sample_file} \
         -L /data/beds/preprocessed.interval_list \
@@ -89,6 +89,9 @@ main() {
         '"$CollectReadCounts_args"' \
         -O /data/base_counts/${sample_name}_basecount.hdf5 \
         -verbosity WARNING'
+
+    duration=$SECONDS
+    echo "CollectReadCounts completed in $(($duration / 60))m$(($duration % 60))s"
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     batch_input=""
@@ -102,8 +105,9 @@ main() {
     mark-section "FilterIntervals"
     echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
 
+    SECONDS=0
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
-        $GATK_image gatk FilterIntervals \
+        "$GATK_image" gatk FilterIntervals \
         -L /data/beds/preprocessed.interval_list \
         -imr OVERLAPPING_ONLY \
         --annotated-intervals /data/beds/annotated_intervals.tsv \
@@ -111,22 +115,27 @@ main() {
         -O /data/beds/filtered.interval_list \
         -verbosity WARNING
 
-    echo "Identifying excluded intervals from CNV calling on this run"
+    duration=$SECONDS
+    echo "FilterIntervals completed in $(($duration / 60))m$(($duration % 60))s"
 
-    # Convert interval_list to BED files
+    echo "Identifying excluded intervals from CNV calling on this run"
+    SECONDS=0
     docker run \
         -v /home/dnanexus/inputs:/data \
-        $GATK_image gatk IntervalListToBed \
+        "$GATK_image" gatk IntervalListToBed \
         -I /data/beds/preprocessed.interval_list \
         -O /data/beds/preprocessed.bed \
         -verbosity WARNING
 
     docker run \
         -v /home/dnanexus/inputs:/data \
-        $GATK_image gatk IntervalListToBed \
+        "$GATK_image" gatk IntervalListToBed \
         -I /data/beds/filtered.interval_list \
         -O /data/beds/filtered.bed \
         -verbosity WARNING
+
+    duration=$SECONDS
+    echo "IntervalListToBed for preprocessed and filtered lists completed in $(($duration / 60))m$(($duration % 60))s"
 
     # Identify regions that are in preprocessed but not in filtered, ie the excluded regions
     bedtools intersect -v -a inputs/beds/preprocessed.bed -b inputs/beds/filtered.bed > excluded_intervals.bed
@@ -138,9 +147,10 @@ main() {
     mark-section "DetermineGermlineContigPloidy"
     mkdir inputs/ploidy-dir
 
+    SECONDS=0
     /usr/bin/time -v docker run \
         -v /home/dnanexus/inputs:/data \
-        $GATK_image gatk DetermineGermlineContigPloidy \
+        "$GATK_image" gatk DetermineGermlineContigPloidy \
         -L /data/beds/filtered.interval_list \
         -imr OVERLAPPING_ONLY \
         "$DetermineGermlineContigPloidy_args" \
@@ -149,6 +159,9 @@ main() {
         --output-prefix ploidy \
         -O /data/ploidy-dir \
         -verbosity WARNING
+
+    duration=$SECONDS
+    echo "DetermineGermlineContigPloidy completed in $(($duration / 60))m$(($duration % 60))s"
 
     # 4. Run GermlineCNVCaller:
     # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
@@ -159,22 +172,20 @@ main() {
 
     total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
 
-    if [ $scatter_by_interval_count == 'true' -a $scatter_count -lt $total_intervals ]; then
-        # Scatter intervals if required
+    if [ "$scatter_by_interval_count" == 'true' -a "$scatter_count" -lt "$total_intervals" ]; then
         echo "Scattering intervals into sublists of approximately $scatter_count"
 
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
-            $GATK_image gatk IntervalListTools \
+            "$GATK_image" gatk IntervalListTools \
             --INPUT /data/beds/filtered.interval_list \
             --SUBDIVISION_MODE INTERVAL_COUNT \
-            --SCATTER_CONTENT $scatter_count \
+            --SCATTER_CONTENT "$scatter_count" \
             --OUTPUT /data/scatter-dir \
             -verbosity WARNING
 
         # Set off subjobs
         set_off_subjobs
-    elif [ $scatter_by_chromosome == 'true' ]; then
-        # Scatter by chromosome
+    elif [ "$scatter_by_chromosome" == 'true' ]; then
         echo "Scattering intervals by chromosome"
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
         ints=/home/dnanexus/inputs/beds/filtered.interval_list
@@ -197,7 +208,7 @@ main() {
     else
         # Set off cnv_calling together in the parent job
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
-            $GATK_image gatk GermlineCNVCaller \
+            "$GATK_image" gatk GermlineCNVCaller \
             -L /data/beds/filtered.interval_list \
             -imr OVERLAPPING_ONLY \
             --annotated-intervals /data/beds/annotated_intervals.tsv \
@@ -237,7 +248,7 @@ main() {
     sample_num=$(ls inputs/bams/*.bam | wc -l)
     index=$(expr $sample_num - 1)
 
-    parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
+    parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data "$GATK_image" \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         '"$PostprocessGermlineCNVCalls_args"' \
@@ -360,12 +371,13 @@ call_cnvs() {
     mark-section "Loading GATK Docker image"
     docker load -i /home/dnanexus/in/GATK_docker/GATK*.tar.gz
 
-    # Declare ENV variable for command
+    # Declare env variable for command
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
 
     # Run CNV caller
+    SECONDS=0
     /usr/bin/time -v docker run -v /home/dnanexus/in/:/data/ \
-        $GATK_image gatk GermlineCNVCaller \
+        "$GATK_image" gatk GermlineCNVCaller \
         -L /data/interval_list/$interval_list \
         -imr OVERLAPPING_ONLY \
         --annotated-intervals /data/annotation_tsv/$annotated_intervals \
@@ -376,6 +388,9 @@ call_cnvs() {
         --output-prefix $name \
         -O /data/gCNV-dir \
         -verbosity WARNING
+
+    duration=$SECONDS
+    echo "GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
 
     # Upload outputs back to parent (only upload those required for next steps)
     mkdir -p out/GermlineCNVCaller/gCNV-dir
@@ -409,7 +424,6 @@ set_off_subjobs() {
 
     SECONDS=0
     echo "Uploading polidy and base counts for sub jobs"
-
     dx upload -rp /home/dnanexus/inputs/ploidy-dir
     dx upload -rp /home/dnanexus/inputs/base_counts
 
@@ -441,7 +455,11 @@ set_off_subjobs() {
     done
 
     # Wait for all subjobs to finish before grabbing outputs
+    SECONDS=0
     dx wait --from-file job_ids
+
+    duration=$SECONDS
+    echo "All subjobs for GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
 
     # download all scatter output
     _get_gCNV_job_outputs
