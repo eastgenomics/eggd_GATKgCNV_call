@@ -254,7 +254,7 @@ main() {
     if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
     # Upload output files
-     SECONDS=0
+    SECONDS=0
     dx-upload-all-outputs --parallel
     duration=$SECONDS
     echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
@@ -308,7 +308,14 @@ call_cnvs() {
     mkdir -p out/GermlineCNVCaller/gCNV-dir
     mv /home/dnanexus/in/gCNV-dir/$name-calls out/GermlineCNVCaller/gCNV-dir/
     mv /home/dnanexus/in/gCNV-dir/$name-model out/GermlineCNVCaller/gCNV-dir/
-    dx-upload-all-outputs --parallel
+    SECONDS=0
+    dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-calls --path /home/dnanexus/inputs/gCNV-dir
+    dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-model --path /home/dnanexus/inputs/gCNV-dir
+    #dx-upload-all-outputs --parallel
+    #find "/home/dnanexus/out/demultiplexOutput/" -type f | xargs -P ${UPLOAD_THREADS} -n1 -I{} bash -c \
+    #      "dx upload "$file" --path "$remote_path" --parents --brief"
+    duration=$SECONDS
+    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
 
 }
 
@@ -336,6 +343,7 @@ set_off_subjobs() {
             -iGATK_docker='$GATK_docker' \
             -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
             --instance-type $instance \
+            --extra-args='{\"priority\": \"high\"}' \
             --name $job_name"
         cnv_call_jobs+=($(eval $command))
     done
