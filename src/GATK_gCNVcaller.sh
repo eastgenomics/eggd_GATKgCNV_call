@@ -31,8 +31,8 @@ main() {
     # Parse the image ID from the list of docker images
     # need to export variables so they're available to parallel
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
-    export $CollectReadCounts_args
-    export $PostprocessGermlineCNVCalls_args
+    if [[ -n "$CollectReadCounts_args" ]]; then export $CollectReadCounts_args; fi
+    if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export $CollectReadCounts_args; fi
 
     ## Create folder to collect input files:
     mkdir inputs
@@ -192,7 +192,10 @@ main() {
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
 
             # Skip chromosome if no intervals present
-            set +x && chrom_intervals=$( grep -P '^'$i'\t' $ints ) && set -x
+            set +x
+            chrom_intervals=$( grep -P '^'$i'\t' $ints )
+            set -x
+
             if [[ -n "$chrom_intervals" ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
                 continue
@@ -201,6 +204,7 @@ main() {
             grep ^@ $ints > $chr_ints
             grep -P "^$i\t" $ints >> $chr_ints
         done
+        sleep 20
         # Set off subjobs
         set_off_subjobs
     else
