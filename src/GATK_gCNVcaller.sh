@@ -58,13 +58,14 @@ main() {
     mkdir -p inputs/bams
 
     SECONDS=0
-    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' \
+    echo "${bambais[@]}" | jq -r '.["$dnanexus_link"]' \
         | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
 
     duration=$SECONDS
-    total=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
+    total_size=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
+    toal_files=$(find inputs/bams -type f | wc -l)
 
-    echo "Downloaded $(wc -w <<< "$file_ids") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
+    echo "Downloaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
     echo "All input files have downloaded to inputs/"
 
     # Optional to hold job after downloading all input files
@@ -72,8 +73,7 @@ main() {
 
     # 1. Run CollectReadCounts:
     # takes one bam (and its index) file at a time along with the targets.interval_list
-    echo "Running CollectReadCounts for all input bams"
-    mark-section "CollectReadCounts"
+    mark-section "Running CollectReadCounts for all input bams"
     mkdir inputs/base_counts
 
     SECONDS=0
@@ -87,8 +87,7 @@ main() {
         -L /data/beds/preprocessed.interval_list \
         -imr OVERLAPPING_ONLY \
         '"$CollectReadCounts_args"' \
-        -O /data/base_counts/${sample_name}_basecount.hdf5 \
-        -verbosity WARNING'
+        -O /data/base_counts/${sample_name}_basecount.hdf5'
 
     duration=$SECONDS
     echo "CollectReadCounts completed in $(($duration / 60))m$(($duration % 60))s"
@@ -102,8 +101,7 @@ main() {
 
     # 2. Run FilterIntervals:
     # filters out low coverage or not uniquely mappable regions
-    mark-section "FilterIntervals"
-    echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
+    mark-section "Running FilterIntervals for the preprocessed intervals with sample basecounts"
 
     SECONDS=0
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
@@ -113,7 +111,7 @@ main() {
         --annotated-intervals /data/beds/annotated_intervals.tsv \
         $batch_input  $FilterIntervals_args \
         -O /data/beds/filtered.interval_list \
-        -verbosity WARNING
+        --verbosity WARNING
 
     duration=$SECONDS
     echo "FilterIntervals completed in $(($duration / 60))m$(($duration % 60))s"
@@ -125,14 +123,14 @@ main() {
         "$GATK_image" gatk IntervalListToBed \
         -I /data/beds/preprocessed.interval_list \
         -O /data/beds/preprocessed.bed \
-        -verbosity WARNING
+        --VERBOSITY WARNING
 
     docker run \
         -v /home/dnanexus/inputs:/data \
         "$GATK_image" gatk IntervalListToBed \
         -I /data/beds/filtered.interval_list \
         -O /data/beds/filtered.bed \
-        -verbosity WARNING
+        --VERBOSITY WARNING
 
     duration=$SECONDS
     echo "IntervalListToBed for preprocessed and filtered lists completed in $(($duration / 60))m$(($duration % 60))s"
@@ -143,8 +141,7 @@ main() {
     # 3. Run DetermineGermlineContigPloidy:
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
     # outputs a ploidy model and ploidy-calls for each sample
-    echo "Running DetermineGermlineContigPloidy for the calculated basecounts"
-    mark-section "DetermineGermlineContigPloidy"
+    mark-section "Running DetermineGermlineContigPloidy for the calculated basecounts"
     mkdir inputs/ploidy-dir
 
     SECONDS=0
@@ -158,7 +155,7 @@ main() {
         --contig-ploidy-priors /data/prior_prob.tsv \
         --output-prefix ploidy \
         -O /data/ploidy-dir \
-        -verbosity WARNING
+        --verbosity WARNING
 
     duration=$SECONDS
     echo "DetermineGermlineContigPloidy completed in $(($duration / 60))m$(($duration % 60))s"
@@ -166,14 +163,13 @@ main() {
     # 4. Run GermlineCNVCaller:
     # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
     # outputs a CNVcalling model and copy ratio files for each sample
-    echo "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
-    mark-section "GermlineCNVCaller"
+    mark-section "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mkdir inputs/gCNV-dir
 
     total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
 
     if [ "$scatter_by_interval_count" == 'true' -a "$scatter_count" -lt "$total_intervals" ]; then
-        echo "Scattering intervals into sublists of approximately $scatter_count"
+        mark-section "Scattering intervals into sublists of approximately $scatter_count"
 
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
             "$GATK_image" gatk IntervalListTools \
@@ -181,7 +177,7 @@ main() {
             --SUBDIVISION_MODE INTERVAL_COUNT \
             --SCATTER_CONTENT "$scatter_count" \
             --OUTPUT /data/scatter-dir \
-            -verbosity WARNING
+            --VERBOSITY WARNING
 
         # Set off subjobs
         set_off_subjobs
@@ -196,12 +192,14 @@ main() {
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
 
             # Skip chromosome if no intervals present
-            if [[ ! "$( grep -P '^'$i'\t' $ints )" ]]; then
+            set +x && chrom_intervals=$( grep -P '^'$i'\t' $ints ) && set -x
+            if [[ -n "$chrom_intervals" ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
                 continue
             fi
             # Collect header & relevant lines
-            grep ^@ $ints > $chr_ints; grep -P "^$i\t" $ints >> $chr_ints
+            grep ^@ $ints > $chr_ints
+            grep -P "^$i\t" $ints >> $chr_ints
         done
         # Set off subjobs
         set_off_subjobs
@@ -218,7 +216,7 @@ main() {
             --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
             --output-prefix CNV \
             -O /data/gCNV-dir \
-            -verbosity WARNING
+            --verbosity WARNING
     fi
 
     # Make batch input for model & calls shard paths
@@ -231,8 +229,8 @@ main() {
 
     # 5. Run PostprocessGermlineCNVCalls:
     # takes CNV-model in, spits vcfs out
-    echo "Running PostprocessGermlineCNVCalls"
-    mark-section "PostprocessGermlineCNVCalls"
+
+    mark-section "Running PostprocessGermlineCNVCalls"
     # Required Arguments for 4.2.5.0: (4.2 onwards)
     # --calls-shard-path <File>     List of paths to GermlineCNVCaller call directories. This argument must be specified at least once. Required.
     # --contig-ploidy-calls <File>  Path to contig-ploidy calls directory (output of DetermineGermlineContigPloidy). Required.
@@ -242,12 +240,14 @@ main() {
     # --output-genotyped-segments <File> Output segments VCF file.  Required.
 
     mkdir inputs/vcfs
+
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
     # index is created based on the number of input bams
     # triple colon at the end is the parallel way to provide an array of integers
     sample_num=$(ls inputs/bams/*.bam | wc -l)
     index=$(expr $sample_num - 1)
 
+    SECONDS=0
     parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data "$GATK_image" \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
@@ -260,8 +260,11 @@ main() {
         --output-genotyped-intervals /data/vcfs/sample_{}_intervals.vcf \
         --output-genotyped-segments /data/vcfs/sample_{}_segments.vcf \
         --output-denoised-copy-ratios /data/vcfs/sample_{}_denoised_copy_ratios.tsv \
-        -verbosity WARNING \
+        --verbosity WARNING \
     ' ::: $(seq 0 1 $index)
+
+    duration=$SECONDS
+    echo "PostprocessGermlineCNVCalls completed in $(($duration / 60))m$(($duration % 60))s"
 
     # 6. Rename output vcf files based on the sample they contain information about
     find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs $THREADS ' \
@@ -387,7 +390,7 @@ call_cnvs() {
         --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
         --output-prefix $name \
         -O /data/gCNV-dir \
-        -verbosity WARNING
+        --verbosity WARNING
 
     duration=$SECONDS
     echo "GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
@@ -419,6 +422,7 @@ call_cnvs() {
 }
 
 set_off_subjobs() {
+    mark-section "Setting off subjobs"
     # Upload input files to workspace container so subjobs can access them
     tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
 
