@@ -1,8 +1,5 @@
 #!/bin/bash
 # GATKgCNV_call
-#
-# Any code outside of main() (or any entry point you may add) is
-# ALWAYS executed, followed by running the entry point itself.
 
 # Exit at any point if there is any error and output each line as it is executed (for debugging)
 set -e -x -o pipefail
@@ -11,9 +8,9 @@ set -e -x -o pipefail
 PS4='\000[$(date)]\011'
 export TZ=Europe/London
 
-# set frequency of instance usage in logs to 30 seconds
+# set frequency of instance usage in logs to 10 seconds
 kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
-/usr/bin/dx-dstat 30
+/usr/bin/dx-dstat 10
 
 main() {
 
@@ -50,22 +47,24 @@ main() {
         mv prior_prob.tsv inputs/
     fi
 
-    mkdir -p inputs/beds
+    # Intervals file (preprocessed bed from GATK_prep) and annotation tsv (from GATK_prep)\
     mark-section "Downloading interval files"
-    # Intervals file (preprocessed bed from GATK_prep)
+    mkdir -p inputs/beds
     dx download "$interval_list" -o inputs/beds/preprocessed.interval_list
-    # Annotation tsv (from GATK_prep)
     dx download "$annotation_tsv" -o inputs/beds/annotated_intervals.tsv
 
-    mkdir -p inputs/bams
-    ## Download all input bam and bai files
+    # Download all input bam and bai files
     mark-section "Downloading input bam & bai files"
+    mkdir -p inputs/bams
+
     SECONDS=0
-    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
+    echo ${bambais[@]} | jq -r '.["$dnanexus_link"]' \
+        | xargs -n1 -P$(nproc --all) dx download --no-progress -o inputs/bams/
+
     duration=$SECONDS
     total=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
-    echo "Downloaded $(wc -w <<< "$file_ids") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 
+    echo "Downloaded $(wc -w <<< "$file_ids") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
     echo "All input files have downloaded to inputs/"
 
     # Optional to hold job after downloading all input files
@@ -76,6 +75,7 @@ main() {
     echo "Running CollectReadCounts for all input bams"
     mark-section "CollectReadCounts"
     mkdir inputs/base_counts
+
     find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs $THREADS \
         'sample_file=$( basename filename ); \
         sample_name="${sample_file%.bam}"; \
@@ -95,8 +95,9 @@ main() {
 
     # 2. Run FilterIntervals:
     # filters out low coverage or not uniquely mappable regions
-    echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
     mark-section "FilterIntervals"
+    echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
+
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk FilterIntervals \
         -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
         --annotated-intervals /data/beds/annotated_intervals.tsv \
@@ -104,11 +105,15 @@ main() {
         -O /data/beds/filtered.interval_list
 
     echo "Identifying excluded intervals from CNV calling on this run"
+
     # Convert interval_list to BED files
-    docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
+    docker run \
+        -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
         -I /data/beds/preprocessed.interval_list \
         -O /data/beds/preprocessed.bed
-    docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
+
+    docker run \
+        -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
         -I /data/beds/filtered.interval_list \
         -O /data/beds/filtered.bed
 
@@ -121,10 +126,12 @@ main() {
     echo "Running DetermineGermlineContigPloidy for the calculated basecounts"
     mark-section "DetermineGermlineContigPloidy"
     mkdir inputs/ploidy-dir
-    /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk DetermineGermlineContigPloidy \
+
+    /usr/bin/time -v docker run \
+        -v /home/dnanexus/inputs:/data $GATK_image gatk DetermineGermlineContigPloidy \
         -L /data/beds/filtered.interval_list -imr OVERLAPPING_ONLY \
-        $DetermineGermlineContigPloidy_args \
-        $batch_input \
+        "$DetermineGermlineContigPloidy_args" \
+        "$batch_input" \
         --contig-ploidy-priors /data/prior_prob.tsv \
         --output-prefix ploidy \
         -O /data/ploidy-dir
@@ -135,15 +142,20 @@ main() {
     echo "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mark-section "GermlineCNVCaller"
     mkdir inputs/gCNV-dir
+
     total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
+
     if [ $scatter_by_interval_count == 'true' -a $scatter_count -lt $total_intervals ]; then
         # Scatter intervals if required
         echo "Scattering intervals into sublists of approximately $scatter_count"
-        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListTools \
+
+        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
+            $GATK_image gatk IntervalListTools \
             --INPUT /data/beds/filtered.interval_list \
             --SUBDIVISION_MODE INTERVAL_COUNT \
             --SCATTER_CONTENT $scatter_count \
             --OUTPUT /data/scatter-dir
+
         # Set off subjobs
         set_off_subjobs
     elif [ $scatter_by_chromosome == 'true' ]; then
@@ -151,6 +163,7 @@ main() {
         echo "Scattering intervals by chromosome"
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
         ints=/home/dnanexus/inputs/beds/filtered.interval_list
+
         for i in "${chromosomes[@]}"; do
             echo "Chromosome $i"
             mkdir -p /home/dnanexus/inputs/scatter-dir/chr"$i"
@@ -169,7 +182,8 @@ main() {
     else
         # Set off cnv_calling together in the parent job
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk GermlineCNVCaller \
-            -L /data/beds/filtered.interval_list -imr OVERLAPPING_ONLY \
+            -L /data/beds/filtered.interval_list \
+            -imr OVERLAPPING_ONLY \
             --annotated-intervals /data/beds/annotated_intervals.tsv \
             --run-mode COHORT \
             $GermlineCNVCaller_args \
@@ -191,13 +205,13 @@ main() {
     # takes CNV-model in, spits vcfs out
     echo "Running PostprocessGermlineCNVCalls"
     mark-section "PostprocessGermlineCNVCalls"
-        # Required Arguments for 4.2.5.0: (4.2 onwards)
-        # --calls-shard-path <File>     List of paths to GermlineCNVCaller call directories.  This argument must be specified at least once. Required. 
-        # --contig-ploidy-calls <File>  Path to contig-ploidy calls directory (output of DetermineGermlineContigPloidy). Required. 
-        # --model-shard-path <File>     List of paths to GermlineCNVCaller model directories.  This argument must be specified at least once. Required. 
-        # --output-denoised-copy-ratios <File> Output denoised copy ratio file.  Required. 
-        # --output-genotyped-intervals <File>  Output intervals VCF file.  Required. 
-        # --output-genotyped-segments <File> Output segments VCF file.  Required. 
+    # Required Arguments for 4.2.5.0: (4.2 onwards)
+    # --calls-shard-path <File>     List of paths to GermlineCNVCaller call directories. This argument must be specified at least once. Required.
+    # --contig-ploidy-calls <File>  Path to contig-ploidy calls directory (output of DetermineGermlineContigPloidy). Required.
+    # --model-shard-path <File>     List of paths to GermlineCNVCaller model directories. This argument must be specified at least once. Required.
+    # --output-denoised-copy-ratios <File> Output denoised copy ratio file.  Required.
+    # --output-genotyped-intervals <File>  Output intervals VCF file.  Required.
+    # --output-genotyped-segments <File> Output segments VCF file.  Required.
 
     mkdir inputs/vcfs
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
@@ -205,6 +219,7 @@ main() {
     # triple colon at the end is the parallel way to provide an array of integers
     sample_num=$(ls inputs/bams/*.bam | wc -l)
     index=$(expr $sample_num - 1)
+
     parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
@@ -239,10 +254,11 @@ main() {
     mv inputs/vcfs/*.vcf ${vcf_dir}/
     mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
 
-    mark-section "Creating copy ratio visualisation files"
     # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
     echo "Generating gcnv bed files for all sample copy ratios"
+    mark-section "Creating copy ratio visualisation files"
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
+
     python3 generate_gcnv_bed.py \
         --copy_ratios "$denoised_copy_ratio_files" \
         -s --run "$run_name"
@@ -252,6 +268,7 @@ main() {
 
     echo "All scripts finished successfully, uploading output files to dx"
     mark-section "Uploading outputs"
+
     if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
     # Upload output files
@@ -290,6 +307,13 @@ _upload_single_file() {
 }
 
 call_cnvs() {
+    # prefixes all lines of commands written to stdout with datetime
+    PS4='\000[$(date)]\011'
+    export TZ=Europe/London
+
+    # set frequency of instance usage in logs to 10 seconds
+    kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
+    /usr/bin/dx-dstat 10
 
     dx-download-all-inputs --parallel
 
@@ -386,10 +410,10 @@ set_off_subjobs() {
         fi
 
         dx-jobutil-new-job call_cnvs \
-            -iannotation_tsv='$tsv' \
-            -iinterval_list='$ints' \
-            -iGATK_docker='$GATK_docker' \
-            -iGermlineCNVCaller_args='$GermlineCNVCaller_args' \
+            -iannotation_tsv="$tsv" \
+            -iinterval_list="$ints" \
+            -iGATK_docker="$GATK_docker" \
+            -iGermlineCNVCaller_args="$GermlineCNVCaller_args" \
             --instance-type $instance \
             --extra-args='{"priority": "high"}' \
             --name "$job_name" >> job_ids
