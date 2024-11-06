@@ -63,7 +63,7 @@ main() {
 
     duration=$SECONDS
     total_size=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
-    toal_files=$(find inputs/bams -type f | wc -l)
+    total_files=$(find inputs/bams -type f | wc -l)
 
     echo "Downloaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
     echo "All input files have downloaded to inputs/"
@@ -254,7 +254,7 @@ main() {
     index=$(expr $sample_num - 1)
 
     SECONDS=0
-    parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data "$GATK_image" \
+    parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         '"$PostprocessGermlineCNVCalls_args"' \
