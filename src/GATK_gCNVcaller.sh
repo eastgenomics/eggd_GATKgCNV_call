@@ -31,8 +31,8 @@ main() {
     # Parse the image ID from the list of docker images
     # need to export variables so they're available to parallel
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
-    export $CollectReadCounts_args
-    export $PostprocessGermlineCNVCalls_args
+    if [[ -n "$CollectReadCounts_args" ]]; then export $CollectReadCounts_args; fi
+    if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export $CollectReadCounts_args; fi
 
     ## Create folder to collect input files:
     mkdir inputs
@@ -63,7 +63,7 @@ main() {
 
     duration=$SECONDS
     total_size=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
-    toal_files=$(find inputs/bams -type f | wc -l)
+    total_files=$(find inputs/bams -type f | wc -l)
 
     echo "Downloaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
     echo "All input files have downloaded to inputs/"
@@ -161,7 +161,7 @@ main() {
     echo "DetermineGermlineContigPloidy completed in $(($duration / 60))m$(($duration % 60))s"
 
     # 4. Run GermlineCNVCaller:
-    # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
+    # takes the base count tsvs, target bed and contig ploidy calls from the previous steps
     # outputs a CNVcalling model and copy ratio files for each sample
     mark-section "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mkdir inputs/gCNV-dir
@@ -181,7 +181,7 @@ main() {
 
         # Set off subjobs
         set_off_subjobs
-    elif [ "$scatter_by_chromosome" == 'true' ]; then
+    elif [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
         ints=/home/dnanexus/inputs/beds/filtered.interval_list
@@ -192,15 +192,21 @@ main() {
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
 
             # Skip chromosome if no intervals present
-            set +x && chrom_intervals=$( grep -P '^'$i'\t' $ints ) && set -x
-            if [[ -n "$chrom_intervals" ]]; then
+            grep -P "^${i}\t" $ints > ${i}.intervals
+
+            if [[ -s "${i}.intervals" ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
                 continue
             fi
+
             # Collect header & relevant lines
             grep ^@ $ints > $chr_ints
             grep -P "^$i\t" $ints >> $chr_ints
         done
+
+        # TODO - remove this, added to allow buffering of large no. log lines to not get truncated
+        sleep 20
+
         # Set off subjobs
         set_off_subjobs
     else
@@ -248,7 +254,7 @@ main() {
     index=$(expr $sample_num - 1)
 
     SECONDS=0
-    parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data "$GATK_image" \
+    parallel --jobs $THREADS '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         '"$PostprocessGermlineCNVCalls_args"' \
