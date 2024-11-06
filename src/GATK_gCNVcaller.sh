@@ -80,11 +80,15 @@ main() {
         'sample_file=$( basename filename ); \
         sample_name="${sample_file%.bam}"; \
         echo $sample_name; \
-        /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data $GATK_image gatk CollectReadCounts \
+        /usr/bin/time -v sudo docker run -v /home/dnanexus/inputs:/data \
+        $GATK_image gatk CollectReadCounts \
+        -verbosity WARNING \
         -I /data/bams/${sample_file} \
-        -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
+        -L /data/beds/preprocessed.interval_list \
+        -imr OVERLAPPING_ONLY \
         '"$CollectReadCounts_args"' \
-        -O /data/base_counts/${sample_name}_basecount.hdf5'
+        -O /data/base_counts/${sample_name}_basecount.hdf5 \
+        -verbosity WARNING'
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     batch_input=""
@@ -98,24 +102,31 @@ main() {
     mark-section "FilterIntervals"
     echo "Running FilterIntervals for the preprocessed intervals with sample basecounts"
 
-    /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk FilterIntervals \
-        -L /data/beds/preprocessed.interval_list -imr OVERLAPPING_ONLY \
+    /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
+        $GATK_image gatk FilterIntervals \
+        -L /data/beds/preprocessed.interval_list \
+        -imr OVERLAPPING_ONLY \
         --annotated-intervals /data/beds/annotated_intervals.tsv \
         $batch_input  $FilterIntervals_args \
-        -O /data/beds/filtered.interval_list
+        -O /data/beds/filtered.interval_list \
+        -verbosity WARNING
 
     echo "Identifying excluded intervals from CNV calling on this run"
 
     # Convert interval_list to BED files
     docker run \
-        -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
+        -v /home/dnanexus/inputs:/data \
+        $GATK_image gatk IntervalListToBed \
         -I /data/beds/preprocessed.interval_list \
-        -O /data/beds/preprocessed.bed
+        -O /data/beds/preprocessed.bed \
+        -verbosity WARNING
 
     docker run \
-        -v /home/dnanexus/inputs:/data $GATK_image gatk IntervalListToBed \
+        -v /home/dnanexus/inputs:/data \
+        $GATK_image gatk IntervalListToBed \
         -I /data/beds/filtered.interval_list \
-        -O /data/beds/filtered.bed
+        -O /data/beds/filtered.bed \
+        -verbosity WARNING
 
     # Identify regions that are in preprocessed but not in filtered, ie the excluded regions
     bedtools intersect -v -a inputs/beds/preprocessed.bed -b inputs/beds/filtered.bed > excluded_intervals.bed
@@ -128,13 +139,16 @@ main() {
     mkdir inputs/ploidy-dir
 
     /usr/bin/time -v docker run \
-        -v /home/dnanexus/inputs:/data $GATK_image gatk DetermineGermlineContigPloidy \
-        -L /data/beds/filtered.interval_list -imr OVERLAPPING_ONLY \
+        -v /home/dnanexus/inputs:/data \
+        $GATK_image gatk DetermineGermlineContigPloidy \
+        -L /data/beds/filtered.interval_list \
+        -imr OVERLAPPING_ONLY \
         "$DetermineGermlineContigPloidy_args" \
         "$batch_input" \
         --contig-ploidy-priors /data/prior_prob.tsv \
         --output-prefix ploidy \
-        -O /data/ploidy-dir
+        -O /data/ploidy-dir \
+        -verbosity WARNING
 
     # 4. Run GermlineCNVCaller:
     # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
@@ -154,7 +168,8 @@ main() {
             --INPUT /data/beds/filtered.interval_list \
             --SUBDIVISION_MODE INTERVAL_COUNT \
             --SCATTER_CONTENT $scatter_count \
-            --OUTPUT /data/scatter-dir
+            --OUTPUT /data/scatter-dir \
+            -verbosity WARNING
 
         # Set off subjobs
         set_off_subjobs
@@ -181,7 +196,8 @@ main() {
         set_off_subjobs
     else
         # Set off cnv_calling together in the parent job
-        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image gatk GermlineCNVCaller \
+        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
+            $GATK_image gatk GermlineCNVCaller \
             -L /data/beds/filtered.interval_list \
             -imr OVERLAPPING_ONLY \
             --annotated-intervals /data/beds/annotated_intervals.tsv \
@@ -190,7 +206,8 @@ main() {
             $batch_input \
             --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
             --output-prefix CNV \
-            -O /data/gCNV-dir
+            -O /data/gCNV-dir \
+            -verbosity WARNING
     fi
 
     # Make batch input for model & calls shard paths
@@ -232,6 +249,7 @@ main() {
         --output-genotyped-intervals /data/vcfs/sample_{}_intervals.vcf \
         --output-genotyped-segments /data/vcfs/sample_{}_segments.vcf \
         --output-denoised-copy-ratios /data/vcfs/sample_{}_denoised_copy_ratios.tsv \
+        -verbosity WARNING \
     ' ::: $(seq 0 1 $index)
 
     # 6. Rename output vcf files based on the sample they contain information about
@@ -346,15 +364,18 @@ call_cnvs() {
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
 
     # Run CNV caller
-    /usr/bin/time -v docker run -v /home/dnanexus/in/:/data/ $GATK_image gatk GermlineCNVCaller \
-        -L /data/interval_list/$interval_list -imr OVERLAPPING_ONLY \
+    /usr/bin/time -v docker run -v /home/dnanexus/in/:/data/ \
+        $GATK_image gatk GermlineCNVCaller \
+        -L /data/interval_list/$interval_list \
+        -imr OVERLAPPING_ONLY \
         --annotated-intervals /data/annotation_tsv/$annotated_intervals \
         --run-mode COHORT \
         $GermlineCNVCaller_args \
         $batch_input \
         --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
         --output-prefix $name \
-        -O /data/gCNV-dir
+        -O /data/gCNV-dir \
+        -verbosity WARNING
 
     # Upload outputs back to parent (only upload those required for next steps)
     mkdir -p out/GermlineCNVCaller/gCNV-dir
