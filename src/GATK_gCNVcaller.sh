@@ -161,7 +161,7 @@ main() {
     echo "DetermineGermlineContigPloidy completed in $(($duration / 60))m$(($duration % 60))s"
 
     # 4. Run GermlineCNVCaller:
-    # takes the base count tsv-s, target bed and contig ploidy calls from the previous steps
+    # takes the base count tsvs, target bed and contig ploidy calls from the previous steps
     # outputs a CNVcalling model and copy ratio files for each sample
     mark-section "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mkdir inputs/gCNV-dir
