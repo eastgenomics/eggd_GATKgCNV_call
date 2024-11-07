@@ -145,7 +145,7 @@ main() {
     # takes the base count tsv-s from the previous step, optional target_bed, and a contig plody priors tsv
     # outputs a ploidy model and ploidy-calls for each sample
     mark-section "Running DetermineGermlineContigPloidy for the calculated basecounts"
-    mkdir inputs/ploidy-dir
+    mkdir inputs/ploidy_dir
 
     SECONDS=0
     /usr/bin/time -v docker run \
@@ -157,7 +157,7 @@ main() {
         $batch_input \
         --contig-ploidy-priors /data/prior_prob.tsv \
         --output-prefix ploidy \
-        -O /data/ploidy-dir \
+        -O /data/ploidy_dir \
         --verbosity WARNING
 
     duration=$SECONDS
@@ -219,7 +219,7 @@ main() {
             --run-mode COHORT \
             $GermlineCNVCaller_args \
             $batch_input \
-            --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
+            --contig-ploidy-calls /data/ploidy_dir/ploidy-calls/ \
             --output-prefix CNV \
             -O /data/gCNV-dir \
             --verbosity WARNING
@@ -261,7 +261,7 @@ main() {
         --autosomal-ref-copy-number 2 \
         --allosomal-contig X \
         --allosomal-contig Y \
-        --contig-ploidy-calls /data/ploidy-dir/ploidy-calls \
+        --contig-ploidy-calls /data/ploidy_dir/ploidy-calls \
         '"$batch_input_postprocess"' \
         --output-genotyped-intervals /data/vcfs/sample_{}_intervals.vcf \
         --output-genotyped-segments /data/vcfs/sample_{}_segments.vcf \
@@ -341,11 +341,11 @@ _call_cnvs() {
         | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/basecounts/
 
     # Get ploidy calls
-    mkdir -p /home/dnanexus/in/ploidy-dir
-    dx find data --path $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls --brief \
-        | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/ploidy-dir/
+    mkdir -p /home/dnanexus/in/ploidy_dir
+    dx find data --path $DX_WORKSPACE_ID:ploidy_dir/ploidy-calls --brief \
+        | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/ploidy_dir/
 
-    # dx download -r $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls -o /home/dnanexus/in/ploidy-dir/
+    # dx download -r $DX_WORKSPACE_ID:ploidy_dir/ploidy-calls -o /home/dnanexus/in/ploidy_dir/
 
     duration=$SECONDS
     total_files=$(find in/ -type f | wc -l)
@@ -378,7 +378,7 @@ _call_cnvs() {
         --run-mode COHORT \
         $GermlineCNVCaller_args \
         $batch_input \
-        --contig-ploidy-calls /data/ploidy-dir/ploidy-calls/ \
+        --contig-ploidy-calls /data/ploidy_dir/ploidy-calls/ \
         --output-prefix $name \
         -O /data/gCNV-dir \
         --verbosity WARNING
@@ -413,11 +413,14 @@ _set_off_subjobs() {
 
     SECONDS=0
     echo "Uploading polidy and base counts for sub jobs"
-    dx upload -rp /home/dnanexus/inputs/ploidy-dir
-    dx upload -rp /home/dnanexus/inputs/base_counts
+    find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/base_counts -type f \
+        | xargs xargs -P ${cores} -n1 -I{} bash -c "_upload_single_file {} _ false"
+
+    # dx upload -rp /home/dnanexus/inputs/ploidy_dir
+    # dx upload -rp /home/dnanexus/inputs/base_counts
 
     duration=$SECONDS
-    echo "Uploaded polidy and base count files in $(($duration / 60))m$(($duration % 60))s"
+    echo "Uploaded ploidy and base count files in $(($duration / 60))m$(($duration % 60))s"
 
     for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
         job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
@@ -428,7 +431,7 @@ _set_off_subjobs() {
         if [ $interval_num -gt 15000 ]; then
             instance=mem1_ssd1_v2_x72
         elif [ $interval_num -gt 10000 ]; then
-            instance=mem1_ssd1_v2_x32
+            instance=mem1_ssd1_v2_x36
         else
             instance=mem1_ssd1_v2_x16
         fi
@@ -438,7 +441,7 @@ _set_off_subjobs() {
             -iinterval_list="$ints" \
             -iGATK_docker="$GATK_docker" \
             -iGermlineCNVCaller_args="$GermlineCNVCaller_args" \
-            --instance-type $instance \
+            --instance-type "$instance" \
             --extra-args='{"priority": "high"}' \
             --name "$job_name" >> job_ids
     done
