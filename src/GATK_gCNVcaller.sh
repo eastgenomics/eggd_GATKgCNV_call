@@ -14,9 +14,9 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 
 main() {
     mark-section "Installing packages"
-    # sudo dpkg -i sysstat*.deb
-    # sudo dpkg -i parallel*.deb
-    # sudo -H python3 -m pip install --no-index --no-deps packages/*
+    sudo dpkg -i sysstat*.deb
+    sudo dpkg -i parallel*.deb
+    sudo -H python3 -m pip install --no-index --no-deps packages/*
 
     # control how many operations to open in parallel for download / upload
     THREADS=$(nproc --all)
@@ -24,9 +24,8 @@ main() {
     # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
     echo "{}" > job_output.json
 
-    SECONDS=0
-    # Load the GATK docker image
     mark-section "Loading GATK Docker image"
+    SECONDS=0
     dx download "$GATK_docker" -o GATK.tar.gz
     docker load -i GATK.tar.gz
     duration=$SECONDS
@@ -329,7 +328,6 @@ _call_cnvs() {
 
     SECONDS=0
     dx-download-all-inputs --parallel
-    duration=$SECONDS
 
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
@@ -339,8 +337,10 @@ _call_cnvs() {
 
     # Get basecounts
     mkdir -p /home/dnanexus/in/basecounts
-    dx download $( dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief ) -o /home/dnanexus/in/basecounts/
+    dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief \
+        | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/basecounts/
 
+    duration=$SECONDS
     total_files=$(find in/ -type f | wc -l)
     total_size=$(du -sh in/ | cut -f 1)
     echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
