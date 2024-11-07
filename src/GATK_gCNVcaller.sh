@@ -436,6 +436,7 @@ _set_off_subjobs() {
 
     # Wait for all subjobs to finish before grabbing outputs
     SECONDS=0
+    echo "$(wc -l job_ids) jobs launched, holding job until all to complete..."
     dx wait --from-file job_ids
 
     duration=$SECONDS
