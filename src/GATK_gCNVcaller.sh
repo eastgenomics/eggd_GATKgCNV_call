@@ -180,7 +180,7 @@ main() {
             --VERBOSITY WARNING
 
         # Set off subjobs, will be held here until all complete
-        set_off_subjobs
+        _set_off_subjobs
     elif [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
@@ -205,7 +205,7 @@ main() {
         echo "Completed collecting intervals for all chromosomes"
 
         # Set off subjobs, will be held here until all complete
-        set_off_subjobs
+        _set_off_subjobs
     else
         # Set off cnv_calling together in the parent job
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
@@ -314,7 +314,7 @@ main() {
 
 }
 
-call_cnvs() {
+_call_cnvs() {
     # prefixes all lines of commands written to stdout with datetime
     PS4='\000[$(date)]\011'
     export TZ=Europe/London
@@ -397,7 +397,7 @@ call_cnvs() {
 
 }
 
-set_off_subjobs() {
+_set_off_subjobs() {
     mark-section "Setting off subjobs"
     # Upload input files to workspace container so subjobs can access them
     tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
@@ -424,7 +424,7 @@ set_off_subjobs() {
             instance=mem2_ssd1_v2_x8
         fi
 
-        dx-jobutil-new-job call_cnvs \
+        dx-jobutil-new-job _call_cnvs \
             -iannotation_tsv="$tsv" \
             -iinterval_list="$ints" \
             -iGATK_docker="$GATK_docker" \
