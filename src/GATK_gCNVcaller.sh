@@ -13,20 +13,24 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 /usr/bin/dx-dstat 10
 
 main() {
-
     mark-section "Installing packages"
-    echo "Installing packages"
-    sudo dpkg -i sysstat*.deb
-    sudo dpkg -i parallel*.deb
-    sudo -H python3 -m pip install --no-index --no-deps packages/*
+    # sudo dpkg -i sysstat*.deb
+    # sudo dpkg -i parallel*.deb
+    # sudo -H python3 -m pip install --no-index --no-deps packages/*
 
     # control how many operations to open in parallel for download / upload
     THREADS=$(nproc --all)
 
+    # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
+    echo "{}" > job_output.json
+
+    SECONDS=0
     # Load the GATK docker image
     mark-section "Loading GATK Docker image"
     dx download "$GATK_docker" -o GATK.tar.gz
     docker load -i GATK.tar.gz
+    duration=$SECONDS
+    echo "Downloaded and loaded in $(($duration / 60))m$(($duration % 60))s"
 
     # Parse the image ID from the list of docker images
     # need to export variables (if set) so they're available to parallel
@@ -116,7 +120,7 @@ main() {
     duration=$SECONDS
     echo "FilterIntervals completed in $(($duration / 60))m$(($duration % 60))s"
 
-    echo "Identifying excluded intervals from CNV calling on this run"
+    mark-section "Running IntervalListToBed to identify excluded intervals from CNV calling on this run"
     SECONDS=0
     docker run \
         -v /home/dnanexus/inputs:/data \
@@ -222,14 +226,6 @@ main() {
             --verbosity WARNING
     fi
 
-    # Make batch input for model & calls shard paths
-    batch_input_postprocess=""
-    for shard_dir in inputs/gCNV-dir/*-model; do
-        prefix=$( basename $shard_dir | cut -d '-' -f1 )
-        batch_input_postprocess+="--calls-shard-path /data/gCNV-dir/$prefix-calls "
-        batch_input_postprocess+="--model-shard-path /data/gCNV-dir/$prefix-model "
-    done
-
     # 5. Run PostprocessGermlineCNVCalls:
     # takes CNV-model in, spits vcfs out
 
@@ -243,6 +239,14 @@ main() {
     # --output-genotyped-segments <File> Output segments VCF file.  Required.
 
     mkdir inputs/vcfs
+
+    # Make batch input for model & calls shard paths
+    batch_input_postprocess=""
+    for shard_dir in inputs/gCNV-dir/*-model; do
+        prefix=$( basename $shard_dir | cut -d '-' -f1 )
+        batch_input_postprocess+="--calls-shard-path /data/gCNV-dir/$prefix-calls "
+        batch_input_postprocess+="--model-shard-path /data/gCNV-dir/$prefix-model "
+    done
 
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
     # index is created based on the number of input bams
@@ -285,13 +289,12 @@ main() {
     summary_dir=out/result_files/CNV_summary && mkdir -p ${summary_dir}
     vis_dir=out/result_files/CNV_visualisation && mkdir -p ${vis_dir}
 
-    # and move result files into outdir to be uploaded
+    # move result files into outdir to be uploaded
     mv inputs/vcfs/*.vcf ${vcf_dir}/
     mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
 
     # 7. Generate gcnv bed files from copy ratios for visualisation in IGV
-    echo "Generating gcnv bed files for all sample copy ratios"
-    mark-section "Creating copy ratio visualisation files"
+    mark-section "Generating gCNV copy ratio visualisation files"
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
 
     python3 generate_gcnv_bed.py \
@@ -301,17 +304,15 @@ main() {
     mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
     mv ./*.gcnv.bed.gz* "${vis_dir}"/
 
-    echo "All scripts finished successfully, uploading output files to dx"
-    mark-section "Uploading outputs"
-
     if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
-    # Upload output files
+    mark-section "Uploading final output"
+
     SECONDS=0
     dx-upload-all-outputs --parallel
     duration=$SECONDS
-    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
 
+    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
 }
 
 _call_cnvs() {
@@ -323,13 +324,12 @@ _call_cnvs() {
     kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
     /usr/bin/dx-dstat 10
 
+    # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
+    echo "{}" > job_output.json
+
     SECONDS=0
     dx-download-all-inputs --parallel
     duration=$SECONDS
-
-    total_files=$(find in/ -type f | wc -l)
-    total_size=$(du -sh in/ | cut -f 1)
-    echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
 
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
@@ -340,6 +340,10 @@ _call_cnvs() {
     # Get basecounts
     mkdir -p /home/dnanexus/in/basecounts
     dx download $( dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief ) -o /home/dnanexus/in/basecounts/
+
+    total_files=$(find in/ -type f | wc -l)
+    total_size=$(du -sh in/ | cut -f 1)
+    echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
 
     # Get ploidy calls
     mkdir -p /home/dnanexus/in/ploidy-dir
@@ -466,13 +470,11 @@ _get_gCNV_job_outputs() {
     set +x  # suppress this going to the logs as its long
 
     # files from sub jobs will be in the container- project context of the
-    # current job ($DX_WORKSPACE-id) => search here for  all the files
+    # current job ($DX_WORKSPACE-id) => search here for all the files
     gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV-dir")
 
     # turn describe output into id:/path/to/file to download with dir structure
     files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $gCNV_files)
-
-    echo "Found $(len $files) in $DX_WORKSPACE_ID:/gCNV-dir to download"
 
     # build aggregated directory structure and download all files
     cmds=$(for f in  $files; do \
@@ -486,7 +488,6 @@ _get_gCNV_job_outputs() {
     total=$(du -sh /home/dnanexus/inputs/gCNV-dir/ | cut -f1)
     duration=$SECONDS
     echo "Downloaded $(wc -w <<< ${files}) files (${total}) in $(($duration / 60))m$(($duration % 60))s"
-
 }
 
 _upload_single_file() {
@@ -507,7 +508,8 @@ _upload_single_file() {
     local field=$2
     local link=$3
 
-    local remote_path=$(sed s'/\/home\/dnanexus\/out\///' <<< "$file")
+    # remove any parts of /home, /dnanexus, /out and /inputs from the upload path
+    local remote_path=$(sed 's/\/home//;s/\/dnanexus//;s/\/out//;s/\/inputs//' <<< "$file")
 
     file_id=$(dx upload "$file" --path "$remote_path" --parents --brief)
 
