@@ -29,7 +29,7 @@ main() {
     docker load -i GATK.tar.gz
 
     # Parse the image ID from the list of docker images
-    # need to export variables so they're available to parallel
+    # need to export variables (if set) so they're available to parallel
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
     if [[ -n "$CollectReadCounts_args" ]]; then export $CollectReadCounts_args; fi
     if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export $CollectReadCounts_args; fi
