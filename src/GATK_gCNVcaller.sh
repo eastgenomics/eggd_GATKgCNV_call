@@ -323,7 +323,13 @@ _call_cnvs() {
     kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
     /usr/bin/dx-dstat 10
 
+    SECONDS=0
     dx-download-all-inputs --parallel
+    duration=$SECONDS
+
+    total_files=$(find in/ -type f | wc -l)
+    total_size=$(du -sh in/ | cut -f 1)
+    echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
 
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
@@ -345,6 +351,8 @@ _call_cnvs() {
         sample_file=$( basename $base_count )
         batch_input+="--input /data/basecounts/${sample_file} "
     done
+
+    ls /home/dnanexus/in/GATK_docker/
 
     # Load the GATK docker image
     mark-section "Loading GATK Docker image"
@@ -372,13 +380,13 @@ _call_cnvs() {
     echo "GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
 
     # Upload outputs back to parent (only upload those required for next steps)
-    mkdir -p out/inputs/GermlineCNVCaller/gCNV-dir
-    mv /home/dnanexus/in/gCNV-dir/$name-calls out/inputs/GermlineCNVCaller/gCNV-dir/
-    mv /home/dnanexus/in/gCNV-dir/$name-model out/inputs/GermlineCNVCaller/gCNV-dir/
+    mkdir -p out/gCNV-dir
+    mv /home/dnanexus/in/gCNV-dir/$name-calls out/gCNV-dir/
+    mv /home/dnanexus/in/gCNV-dir/$name-model out//gCNV-dir/
 
     cores=$(nproc --all)
     total_files=$(find out/ -type f | wc -l)
-    total_size=$(du -sh out/)
+    total_size=$(du -sh out/ | cut -f 1)
 
     SECONDS=0
     echo "Uploading sample output"
@@ -394,7 +402,6 @@ _call_cnvs() {
     #      "dx upload "$file" --path "$remote_path" --parents --brief"
     duration=$SECONDS
     echo "Uploaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
-
 }
 
 _set_off_subjobs() {
@@ -450,8 +457,7 @@ _get_gCNV_job_outputs() {
 
     # Download output from all gCNV jobs to run final gather step
     # Modified from Jethro's _get_scatter_job_outputs function in eggd_tso500
-
-    echo "Downloading gCNV job output"
+    mark-section "Downloading gCNV job output"
 
     echo "Waiting 30 seconds to ensure all files are hopefully in a closed state..."
     sleep 30
@@ -465,6 +471,8 @@ _get_gCNV_job_outputs() {
 
     # turn describe output into id:/path/to/file to download with dir structure
     files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $gCNV_files)
+
+    echo "Found $(len $files) in $DX_WORKSPACE_ID:/gCNV-dir to download"
 
     # build aggregated directory structure and download all files
     cmds=$(for f in  $files; do \
