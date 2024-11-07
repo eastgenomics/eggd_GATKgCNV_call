@@ -326,37 +326,40 @@ _call_cnvs() {
     # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
     echo "{}" > job_output.json
 
+    # get chromosome name for output prefix
+    name=$( cat dnanexus-job.json | jq -r '.name' )
+
     SECONDS=0
     dx-download-all-inputs --parallel
 
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
-    # get chromosome name for output prefix
-    name=$( cat dnanexus-job.json | jq -r '.name' )
-
     # Get basecounts
     mkdir -p /home/dnanexus/in/basecounts
     dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief \
         | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/basecounts/
+
+    # Get ploidy calls
+    mkdir -p /home/dnanexus/in/ploidy-dir
+    dx find data --path $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls --brief \
+        | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/ploidy-dir/
+
+    # dx download -r $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls -o /home/dnanexus/in/ploidy-dir/
 
     duration=$SECONDS
     total_files=$(find in/ -type f | wc -l)
     total_size=$(du -sh in/ | cut -f 1)
     echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
 
-    # Get ploidy calls
-    mkdir -p /home/dnanexus/in/ploidy-dir
-    dx download -r $DX_WORKSPACE_ID:ploidy-dir/ploidy-calls -o /home/dnanexus/in/ploidy-dir/
-
     # Make basecount batch string
+    set +x
     batch_input=""
     for base_count in /home/dnanexus/in/basecounts/*_basecount.hdf5; do
         sample_file=$( basename $base_count )
         batch_input+="--input /data/basecounts/${sample_file} "
     done
-
-    ls /home/dnanexus/in/GATK_docker/
+    set -x
 
     # Load the GATK docker image
     mark-section "Loading GATK Docker image"
@@ -399,11 +402,6 @@ _call_cnvs() {
     find /home/dnanexus/out/ -type f | xargs -P ${cores} -n1 -I{} bash -c \
         "_upload_single_file {} _ false"
 
-    # dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-calls --path /home/dnanexus/inputs/gCNV-dir
-    # dx upload -rp out/GermlineCNVCaller/gCNV-dir/$name-model --path /home/dnanexus/inputs/gCNV-dir
-    #dx-upload-all-outputs --parallel
-    #find "/home/dnanexus/out/demultiplexOutput/" -type f | xargs -P ${UPLOAD_THREADS} -n1 -I{} bash -c \
-    #      "dx upload "$file" --path "$remote_path" --parents --brief"
     duration=$SECONDS
     echo "Uploaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
 }
