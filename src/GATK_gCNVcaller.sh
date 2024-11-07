@@ -372,7 +372,7 @@ call_cnvs() {
     echo "GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
 
     # Upload outputs back to parent (only upload those required for next steps)
-    mkdir -p out/GermlineCNVCaller/gCNV-dir
+    mkdir -p out/inputs/GermlineCNVCaller/gCNV-dir
     mv /home/dnanexus/in/gCNV-dir/$name-calls out/inputs/GermlineCNVCaller/gCNV-dir/
     mv /home/dnanexus/in/gCNV-dir/$name-model out/inputs/GermlineCNVCaller/gCNV-dir/
 
