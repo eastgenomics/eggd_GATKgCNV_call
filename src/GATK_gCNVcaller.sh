@@ -179,7 +179,7 @@ main() {
             --OUTPUT /data/scatter-dir \
             --VERBOSITY WARNING
 
-        # Set off subjobs
+        # Set off subjobs, will be held here until all complete
         set_off_subjobs
     elif [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
@@ -187,32 +187,24 @@ main() {
         ints=/home/dnanexus/inputs/beds/filtered.interval_list
 
         for i in "${chromosomes[@]}"; do
-            echo "Chromosome $i"
+            echo "Checking chromosome $i"
             mkdir -p /home/dnanexus/inputs/scatter-dir/chr"$i"
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
 
             # Skip chromosome if no intervals present
-            touch ${i}.intervals
-            grep -P '^'$i'\t' $ints > ${i}.intervals
-
-            sleep 5
-            head ${i}.intervals
-            sleep 5
-
-            if [[ -s ${i}.intervals ]]; then
+            if [[ -z $(grep -P '^'$i'\t' $ints | head -n1) ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
-                continue
+            else
+                # Collect header & relevant lines for current chromosome
+                grep ^@ $ints > $chr_ints
+                grep -P '^'$i'\t' $ints >> $chr_ints
             fi
 
-            # Collect header & relevant lines
-            grep ^@ $ints > $chr_ints
-            grep -P "^$i\t" $ints >> $chr_ints
         done
 
-        # TODO - remove this, added to allow buffering of large no. log lines to not get truncated
-        sleep 20
+        echo "Completed collecting intervals for all chromosomes"
 
-        # Set off subjobs
+        # Set off subjobs, will be held here until all complete
         set_off_subjobs
     else
         # Set off cnv_calling together in the parent job
@@ -322,33 +314,6 @@ main() {
 
 }
 
-_upload_single_file() {
-    : '''
-    Uploads single file with dx upload and associates uploaded
-    file ID to specified output field
-
-    Arguments
-    ---------
-        1 : str
-            path and file to upload
-        2 : str
-            app output field to link the uploaded file to
-        3 : bool
-            (optional) controls if to link output file to job output spec
-    '''
-    local file=$1
-    local field=$2
-    local link=$3
-
-    local remote_path=$(sed s'/\/home\/dnanexus\/out\///' <<< "$file")
-
-    file_id=$(dx upload "$file" --path "$remote_path" --parents --brief)
-
-    if [[ "$link" == true ]]; then
-        dx-jobutil-add-output "$field" "$file_id" --array
-    fi
-}
-
 call_cnvs() {
     # prefixes all lines of commands written to stdout with datetime
     PS4='\000[$(date)]\011'
@@ -443,7 +408,7 @@ set_off_subjobs() {
     dx upload -rp /home/dnanexus/inputs/base_counts
 
     duration=$SECONDS
-    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
+    echo "Uploaded polidy and base count files in $(($duration / 60))m$(($duration % 60))s"
 
     for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
         job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
@@ -456,7 +421,7 @@ set_off_subjobs() {
         elif [ $interval_num -gt 10000 ]; then
             instance=mem2_ssd1_v2_x16
         else
-            instance=mem2_ssd2_v2_x8
+            instance=mem2_ssd1_v2_x8
         fi
 
         dx-jobutil-new-job call_cnvs \
@@ -513,4 +478,31 @@ _get_gCNV_job_outputs() {
     duration=$SECONDS
     echo "Downloaded $(wc -w <<< ${files}) files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 
+}
+
+_upload_single_file() {
+    : '''
+    Uploads single file with dx upload and associates uploaded
+    file ID to specified output field
+
+    Arguments
+    ---------
+        1 : str
+            path and file to upload
+        2 : str
+            app output field to link the uploaded file to
+        3 : bool
+            (optional) controls if to link output file to job output spec
+    '''
+    local file=$1
+    local field=$2
+    local link=$3
+
+    local remote_path=$(sed s'/\/home\/dnanexus\/out\///' <<< "$file")
+
+    file_id=$(dx upload "$file" --path "$remote_path" --parents --brief)
+
+    if [[ "$link" == true ]]; then
+        dx-jobutil-add-output "$field" "$file_id" --array
+    fi
 }
