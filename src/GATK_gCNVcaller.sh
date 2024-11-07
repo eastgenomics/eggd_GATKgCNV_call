@@ -428,11 +428,11 @@ _set_off_subjobs() {
         # Bump instance type up for large interval lists
         interval_num=$(grep -v ^@ $i | wc -l)
         if [ $interval_num -gt 15000 ]; then
-            instance=mem2_ssd1_v2_x32
+            instance=mem1_ssd1_v2_x72
         elif [ $interval_num -gt 10000 ]; then
-            instance=mem2_ssd1_v2_x16
+            instance=mem1_ssd1_v2_x32
         else
-            instance=mem2_ssd1_v2_x8
+            instance=mem1_ssd1_v2_x16
         fi
 
         dx-jobutil-new-job _call_cnvs \
