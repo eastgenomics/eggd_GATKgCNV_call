@@ -39,7 +39,7 @@ main() {
 
     # Prior probabilities tsv
     # file can be provided as input or a default is used bundled with the app
-    if [[ ! -z $prior_prob ]]
+    if [[ -n $prior_prob ]]
     then
         echo "Prior prob file is provided as '$prior_prob'"
         dx download "$prior_prob" -o inputs/prior_prob.tsv
