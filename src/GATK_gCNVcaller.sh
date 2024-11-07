@@ -192,9 +192,14 @@ main() {
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
 
             # Skip chromosome if no intervals present
-            grep -P "^${i}\t" $ints > ${i}.intervals
+            touch ${i}.intervals
+            grep -P '^'$i'\t' $ints > ${i}.intervals
 
-            if [[ -s "${i}.intervals" ]]; then
+            sleep 5
+            head ${i}.intervals
+            sleep 5
+
+            if [[ -s ${i}.intervals ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
                 continue
             fi
