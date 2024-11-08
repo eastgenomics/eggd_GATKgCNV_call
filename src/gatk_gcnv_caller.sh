@@ -192,13 +192,7 @@ _call_GATK_FilterIntervals() {
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     local batch_input
-    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; | sed 's/^/--input /g')
-    # batch_input=""
-    # for base_count in inputs/basecounts/*_basecount.hdf5; do
-    #     sample_file=$( basename $base_count )
-    #     batch_input+="--input /data/basecounts/${sample_file} "
-    # done
-
+    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
@@ -248,12 +242,8 @@ _call_GATK_DetermineGermlineContigPloidy() {
     mkdir inputs/ploidy_dir
 
     local batch_input
-    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; | sed 's/^/--input /g')
-    # batch_input=""
-    # for base_count in inputs/basecounts/*_basecount.hdf5; do
-    #     sample_file=$( basename $base_count )
-    #     batch_input+="--input /data/basecounts/${sample_file} "
-    # done
+    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+        | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
     /usr/bin/time -v docker run \
@@ -288,9 +278,6 @@ _call_GATK_GermlineCNVCaller() {
 
     local total_intervals
     total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
-
-    local batch_input
-    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; | sed 's/^/--input /g')
 
     if [ "$scatter_by_interval_count" == 'true' -a "$scatter_count" -lt "$total_intervals" ]; then
         mark-section "Scattering intervals into sublists of approximately $scatter_count"
@@ -337,6 +324,10 @@ _call_GATK_GermlineCNVCaller() {
         _set_off_subjobs
     else
         # Set off cnv_calling together in the parent job
+        local batch_input
+        batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+            | sed 's/^/--input \/data\/basecounts\//g')
+
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
             "$GATK_image" gatk GermlineCNVCaller \
             -L /data/beds/filtered.interval_list \
@@ -438,9 +429,9 @@ _launch_sub_jobs() {
     duration=$SECONDS
     echo "Uploaded ploidy and base count files in $(($duration / 60))m$(($duration % 60))s"
 
-    for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
-        job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
-        ints=$( dx upload --brief $i )
+    for interval in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
+        job_name=$(grep -Po 'chr[0-9XY]+' <<< "$interval")
+        interval_file=$(dx upload --brief $interval)
 
         # Bump instance type up for large interval lists
         interval_num=$(grep -v ^@ $i | wc -l)
@@ -454,7 +445,7 @@ _launch_sub_jobs() {
 
         dx-jobutil-new-job _call_cnvs \
             -iannotation_tsv="$tsv" \
-            -iinterval_list="$ints" \
+            -iinterval_list="$interval_file" \
             -iGATK_docker="$GATK_docker" \
             -iGermlineCNVCaller_args="$GermlineCNVCaller_args" \
             --instance-type "$instance" \
@@ -536,9 +527,8 @@ _sub_job() {
     _sub_job_download_inputs
 
     # Make basecount batch string
-    set +x
-    batch_input=$(find in/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; | sed 's/^/--input /g')
-    set -x
+    batch_input=$(find in/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+        | sed 's/^/--input \/data\/basecounts\//g')
 
     # Load the GATK docker image
     mark-section "Loading GATK Docker image"
