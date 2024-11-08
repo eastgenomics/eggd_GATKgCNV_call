@@ -1,5 +1,5 @@
 {
-    "name": "eggd_GATKgCNV_call_JR",
+    "name": "eggd_GATKgCNV_call_refactor",
     "title": "GATKgCNV_call",
     "summary": "GATK gCNV germline CNV caller",
     "dxapi": "1.0.0",
@@ -162,7 +162,7 @@
         "release": "20.04",
         "version": "0",
         "interpreter": "bash",
-        "file": "src/GATK_gCNVcaller.sh",
+        "file": "src/gatk_gcnv_caller.sh",
         "headJobOnDemand": true,
         "timeoutPolicy": {
         "*": {

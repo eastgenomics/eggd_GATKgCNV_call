@@ -15,12 +15,16 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 PROCESSES=$(nproc --all)
 
 main() {
-    _intall_packages
+    mark-section "Installing packages and loading GATK Docker image"
+    sudo dpkg -i sysstat*.deb
+    sudo dpkg -i parallel*.deb
+    sudo -H python3 -m pip install --no-index --no-deps packages/*
+
+    dx download "$GATK_docker" -o GATK.tar.gz
+    docker load -i GATK.tar.gz
 
     # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
     echo "{}" > job_output.json
-
-    _get_and_load_gatk_docker_image
 
     # Parse the image ID from the list of docker images
     # need to export variables (if set) so they're available to parallel
@@ -45,36 +49,13 @@ main() {
     _call_GATKPostProcessGermlineCNVCalls
 
     _call_generate_gcnv_bed
-
     _format_output_files_for_upload
 
     if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
 
     _upload_final_output
-
-
 }
 
-_intall_packages() {
-    mark-section "Installing packages"
-    sudo dpkg -i sysstat*.deb
-    sudo dpkg -i parallel*.deb
-    sudo -H python3 -m pip install --no-index --no-deps packages/*
-}
-
-_get_and_load_gatk_docker_image() {
-    : '''
-    Download and load GATK Docker image
-    '''
-    mark-section "Loading GATK Docker image"
-
-    SECONDS=0
-    dx download "$GATK_docker" -o GATK.tar.gz
-    docker load -i GATK.tar.gz
-
-    duration=$SECONDS
-    echo "Downloaded and loaded in $(($duration / 60))m$(($duration % 60))s"
-}
 
 _download_parent_job_inputs() {
     : '''
@@ -107,6 +88,71 @@ _download_parent_job_inputs() {
 
     echo "Downloaded ${total_files} bam/bai files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
     echo "All input files have downloaded to inputs/"
+}
+
+_format_output_files_for_upload() {
+    : '''
+    Rename and move around final output files for upload
+    '''
+    mark-section "Formatting output files for upload"
+
+    vcf_dir=out/result_files/CNV_vcfs
+    summary_dir=out/result_files/CNV_summary
+    vis_dir=out/result_files/CNV_visualisation
+
+    mkdir -p $vcf_dir $summary_dir $vis_dir
+
+    mv inputs/vcfs/*.vcf ${vcf_dir}/
+    mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
+    mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
+    mv ./*.gcnv.bed.gz* "${vis_dir}"/
+
+    total_files=$(find out/ -type f | wc -l)
+
+    echo "Files moved ready to upload, ${total_files} to upload"
+}
+
+_upload_final_output() {
+    : '''
+    Upload the final app output files
+
+    This is fairly quick, so using built in parallel upload
+    '''
+    mark-section "Uploading final output"
+
+    SECONDS=0
+    dx-upload-all-outputs --parallel
+    duration=$SECONDS
+
+    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
+}
+
+_upload_single_file() {
+    : '''
+    Uploads single file with dx upload and associates uploaded
+    file ID to specified output field
+
+    Arguments
+    ---------
+        1 : str
+            path and file to upload
+        2 : str
+            app output field to link the uploaded file to
+        3 : bool
+            (optional) controls if to link output file to job output spec
+    '''
+    local file=$1
+    local field=$2
+    local link=$3
+
+    # remove any parts of /home, /dnanexus, /out and /inputs from the upload path
+    local remote_path=$(sed 's/\/home//;s/\/dnanexus//;s/\/out//;s/\/inputs//' <<< "$file")
+
+    file_id=$(dx upload "$file" --path "$remote_path" --parents --brief)
+
+    if [[ "$link" == true ]]; then
+        dx-jobutil-add-output "$field" "$file_id" --array
+    fi
 }
 
 _call_GATK_CollectReadCounts() {
@@ -370,9 +416,102 @@ _call_generate_gcnv_bed() {
     echo "Completed generating gCNV copy ratio visualisation files"
 }
 
-_cnv_call_sub_job() {
+_launch_sub_jobs() {
     : '''
-    App code for each sub job to run GATK GermlineCNVCaller
+    Wrapper function to launch all sub jobs per chromosome / interval by calling
+    dx-jobutil-new-job with the _sub_job function.
+
+    This function will hold the parent job until all sub jobs complete.
+    '''
+    mark-section "Launching subjobs to run GATK GermlineCNVCaller"
+
+    # Upload input files to workspace container so subjobs can access them
+    tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
+
+    SECONDS=0
+    echo "Uploading polidy and base counts for sub jobs"
+    export -f _upload_single_file  # required to be accessible to xargs sub shell
+    find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f \
+        | xargs -P $(nproc --all) -n1 -I{} bash -c "_upload_single_file {} _ false"
+
+    duration=$SECONDS
+    echo "Uploaded ploidy and base count files in $(($duration / 60))m$(($duration % 60))s"
+
+    for i in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
+        job_name=$( echo $i | rev | cut -d '/' -f 2 | rev )
+        ints=$( dx upload --brief $i )
+
+        # Bump instance type up for large interval lists
+        interval_num=$(grep -v ^@ $i | wc -l)
+        if [ $interval_num -gt 15000 ]; then
+            instance="mem1_ssd1_v2_x72"
+        elif [ $interval_num -gt 10000 ]; then
+            instance="mem1_ssd1_v2_x36"
+        else
+            instance="mem1_ssd1_v2_x16"
+        fi
+
+        dx-jobutil-new-job _call_cnvs \
+            -iannotation_tsv="$tsv" \
+            -iinterval_list="$ints" \
+            -iGATK_docker="$GATK_docker" \
+            -iGermlineCNVCaller_args="$GermlineCNVCaller_args" \
+            --instance-type "$instance" \
+            --extra-args='{"priority": "high"}' \
+            --name "$job_name" >> job_ids
+    done
+
+    # Wait for all subjobs to finish before grabbing outputs
+    SECONDS=0
+    echo "$(wc -l job_ids) jobs launched, holding job until all to complete..."
+    dx wait --from-file job_ids
+
+    duration=$SECONDS
+    echo "All subjobs for GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
+}
+
+_get_sub_job_output() {
+    : '''
+    Get the output of GerminelineCNVCaller run in each subjob and download back to the parent job.
+
+    Should only be called once all sub jobs have completed from the parent job.
+    '''
+    mark-section "Downloading gCNV job output"
+
+    echo "Waiting 30 seconds to ensure all files are hopefully in a closed state..."
+    sleep 30
+
+    SECONDS=0
+    set +x  # suppress this going to the logs as its long
+
+    # files from sub jobs will be in the container- project context of the
+    # current job ($DX_WORKSPACE-id) => search here for all the files
+    gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV-dir")
+
+    # turn describe output into id:/path/to/file to download with dir structure
+    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $gCNV_files)
+
+    # build aggregated directory structure and download all files
+    cmds=$(for f in  $files; do \
+        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
+        echo "'mkdir -p inputs/$dir && dx download --no-progress $id -o inputs/$path'"; done)
+
+    echo $cmds | xargs -n1 -P${PROCESSES} bash -c
+
+    set -x
+
+    total=$(du -sh /home/dnanexus/inputs/gCNV-dir/ | cut -f1)
+    duration=$SECONDS
+    echo "Downloaded $(wc -w <<< ${files}) files (${total}) in $(($duration / 60))m$(($duration % 60))s"
+}
+
+_sub_job() {
+    : '''
+    App code for each sub job to run GATK GermlineCNVCaller per chromosome / interval
+
+    The annotation tsv, interval list and GATK Docker image are provided as inputs to the app,
+    but both the basecount and ploidy files are uploaded from the parent job and are available
+    in the container, so are downloaded separately.
     '''
     # prefixes all lines of commands written to stdout with datetime
     PS4='\000[$(date)]\011'
@@ -391,57 +530,18 @@ _cnv_call_sub_job() {
     # get chromosome name for output prefix
     name=$( cat dnanexus-job.json | jq -r '.name' )
 
-    SECONDS=0
-    dx-download-all-inputs --parallel
+    export -f _upload_single_file  # required to be accessible to xargs sub shell
 
-    interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
-    annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
-
-    # Get basecounts
-    base_count_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/basecounts")
-
-    # turn describe output into id:/path/to/file to download with dir structure
-    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $base_count_files)
-
-    # build aggregated directory structure and download all files
-    cmds=$(for f in  $files; do \
-        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
-        echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
-
-    echo $cmds | xargs -n1 -P$(nproc --all) bash -c
-
-    # Get ploidy calls
-    ploidy_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/ploidy_dir")
-
-    # turn describe output into id:/path/to/file to download with dir structure
-    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $ploidy_files)
-
-    # build aggregated directory structure and download all files
-    cmds=$(for f in  $files; do \
-        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
-        echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
-
-    echo $cmds | xargs -n1 -P$(nproc --all) bash -c
-
-    duration=$SECONDS
-    total_files=$(find in/ -type f | wc -l)
-    total_size=$(du -sh in/ | cut -f 1)
-    echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
+    _sub_job_download_inputs
 
     # Make basecount batch string
     set +x
-    batch_input=""
-    for base_count in /home/dnanexus/in/basecounts/*_basecount.hdf5; do
-        sample_file=$( basename $base_count )
-        batch_input+="--input /data/basecounts/${sample_file} "
-    done
+    batch_input=$(find in/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; | sed 's/^/--input /g')
     set -x
 
     # Load the GATK docker image
     mark-section "Loading GATK Docker image"
     docker load -i /home/dnanexus/in/GATK_docker/GATK*.tar.gz
-
-    # Declare env variable for command
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
 
     # Run CNV caller
@@ -462,89 +562,64 @@ _cnv_call_sub_job() {
     duration=$SECONDS
     echo "GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
 
-    # Upload outputs back to parent (only upload those required for next steps)
+    _sub_job_upload_outputs
+}
+
+_sub_job_download_inputs() {
+    : '''
+    Util function for _sub_job().
+
+    Downloads all inputs to the sub job, including:
+        - interval lists
+        - basecount files
+        - ploidy files
+    '''
+    SECONDS=0
+    dx-download-all-inputs --parallel
+
+    interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
+    annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
+
+    # Get basecount and ploidy files uploaded into container by parent job
+    basecount_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/basecounts")
+    ploidy_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/ploidy_dir")
+
+    # turn describe output into id:/path/to/file to download with dir structure,
+    # build aggregated directory structure and download all files to given directory path
+    basecount_files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $basecount_files)
+    ploidy_files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $ploidy_files)
+
+    cmds=$(for f in $basecount_files $ploidy_files; do \
+        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
+        echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
+
+    echo $cmds | xargs -n1 -P $PROCESSES bash -c
+
+    duration=$SECONDS
+    total_files=$(find in/ -type f | wc -l)
+    total_size=$(du -sh in/ | cut -f 1)
+    echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
+}
+
+_sub_job_upload_outputs() {
+    : '''
+    Util function for _sub_job().
+
+    Uploads required output back to container to be downloaded back to parent job for post processing
+    '''
+    mark-section "Uploading sub job output"
     mkdir -p out/gCNV-dir
     mv /home/dnanexus/in/gCNV-dir/$name-calls out/gCNV-dir/
     mv /home/dnanexus/in/gCNV-dir/$name-model out//gCNV-dir/
 
-    cores=$(nproc --all)
     total_files=$(find out/ -type f | wc -l)
     total_size=$(du -sh out/ | cut -f 1)
 
     SECONDS=0
     echo "Uploading sample output"
-    export -f _upload_single_file  # required to be accessible to xargs sub shell
-
-    find /home/dnanexus/out/ -type f | xargs -P ${cores} -n1 -I{} bash -c \
+    find /home/dnanexus/out/ -type f | xargs -P $PROCESSES -n1 -I{} bash -c \
         "_upload_single_file {} _ false"
 
     duration=$SECONDS
     echo "Uploaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
-}
-
-
-
-_format_output_files_for_upload() {
-    : '''
-    Rename and move around final output files for upload
-    '''
-    mark-section "Formatting output files for upload"
-
-    vcf_dir=out/result_files/CNV_vcfs
-    summary_dir=out/result_files/CNV_summary
-    vis_dir=out/result_files/CNV_visualisation
-
-    mkdir -p $vcf_dir $summary_dir $vis_dir
-
-    mv inputs/vcfs/*.vcf ${vcf_dir}/
-    mv excluded_intervals.bed ${summary_dir}/$run_name"_excluded_intervals.bed"
-    mv ./"$run_name"*.gcnv.bed.gz* "${summary_dir}"/
-    mv ./*.gcnv.bed.gz* "${vis_dir}"/
-
-    total_files=$(find out/ -type f | wc -l)
-
-    echo "Files moved ready to upload, ${total_files} to upload"
-}
-
-_upload_final_output() {
-    : '''
-    Upload the final app output files
-
-    This is fairly quick, so using built in parallel upload
-    '''
-    mark-section "Uploading final output"
-
-    SECONDS=0
-    dx-upload-all-outputs --parallel
-    duration=$SECONDS
-
-    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
-}
-
-_upload_single_file() {
-    : '''
-    Uploads single file with dx upload and associates uploaded
-    file ID to specified output field
-
-    Arguments
-    ---------
-        1 : str
-            path and file to upload
-        2 : str
-            app output field to link the uploaded file to
-        3 : bool
-            (optional) controls if to link output file to job output spec
-    '''
-    local file=$1
-    local field=$2
-    local link=$3
-
-    # remove any parts of /home, /dnanexus, /out and /inputs from the upload path
-    local remote_path=$(sed 's/\/home//;s/\/dnanexus//;s/\/out//;s/\/inputs//' <<< "$file")
-
-    file_id=$(dx upload "$file" --path "$remote_path" --parents --brief)
-
-    if [[ "$link" == true ]]; then
-        dx-jobutil-add-output "$field" "$file_id" --array
-    fi
 }
