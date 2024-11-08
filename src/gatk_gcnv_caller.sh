@@ -116,7 +116,8 @@ _upload_final_output() {
     : '''
     Upload the final app output files
 
-    This is fairly quick, so using built in parallel upload
+    This is fairly quick as there are not many files and they are small, so using built in
+    parallel upload method
     '''
     mark-section "Uploading final output"
 
