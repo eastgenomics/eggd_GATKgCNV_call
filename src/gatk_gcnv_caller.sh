@@ -22,15 +22,7 @@ main() {
 
     dx download "$GATK_docker" -o GATK.tar.gz
     docker load -i GATK.tar.gz
-
-    # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
-    echo "{}" > job_output.json
-
-    # Parse the image ID from the list of docker images
-    # need to export variables (if set) so they're available to parallel
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
-    if [[ -n "$CollectReadCounts_args" ]]; then export $CollectReadCounts_args; fi
-    if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export $CollectReadCounts_args; fi
 
     _download_parent_job_inputs
 
@@ -64,8 +56,7 @@ _download_parent_job_inputs() {
     mark-section "Downloading inputs"
     mkdir -p inputs/beds inputs/bams
 
-    # Prior probabilities tsv
-    # file can be provided as input or a default is used bundled with the app
+    # Prior probabilities tsv file can be provided as input or a default file bundled with the app
     if [[ -n $prior_prob ]]
     then
         echo "Prior probabilities file is provided as ${prior_prob}"
@@ -166,6 +157,9 @@ _call_GATK_CollectReadCounts() {
     '''
     mark-section "Running CollectReadCounts for all input bams"
     mkdir inputs/basecounts
+
+    # export if set to be available to sub shells in parallel
+    if [[ -n "$CollectReadCounts_args" ]]; then export $CollectReadCounts_args; fi
 
     SECONDS=0
     find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs $PROCESSES \
@@ -371,6 +365,9 @@ _call_GATKPostProcessGermlineCNVCalls() {
     local index
     index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
 
+    # export if set to be available to sub shells in parallel
+    if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export $PostprocessGermlineCNVCalls_args; fi
+
     SECONDS=0
     parallel --jobs $PROCESSES '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
@@ -432,7 +429,7 @@ _launch_sub_jobs() {
         interval_file=$(dx upload --brief $interval)
 
         # Bump instance type up for large interval lists
-        interval_num=$(grep -v ^@ $i | wc -l)
+        interval_num=$(grep -v "^@" $interval | wc -l)
         if [ $interval_num -gt 15000 ]; then
             instance="mem1_ssd1_v2_x72"
         elif [ $interval_num -gt 10000 ]; then
@@ -510,9 +507,6 @@ _sub_job() {
     # set frequency of instance usage in logs to 10 seconds
     kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
     /usr/bin/dx-dstat 10
-
-    # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
-    echo "{}" > job_output.json
 
     # control how many operations to open in parallel for download / upload, set one per CPU core
     PROCESSES=$(nproc --all)
