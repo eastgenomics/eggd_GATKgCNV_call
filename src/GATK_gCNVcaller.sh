@@ -336,14 +336,40 @@ _call_cnvs() {
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
     # Get basecounts
-    mkdir -p /home/dnanexus/in/basecounts
-    dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief \
-        | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/basecounts/
+    base_count_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/base_counts")
+
+    # turn describe output into id:/path/to/file to download with dir structure
+    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $base_count_files)
+
+    # build aggregated directory structure and download all files
+    cmds=$(for f in  $files; do \
+        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
+        echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
+
+    echo $cmds | xargs -n1 -P${THREADS} bash -c
 
     # Get ploidy calls
-    mkdir -p /home/dnanexus/in/ploidy_dir
-    dx find data --path $DX_WORKSPACE_ID:ploidy_dir/ploidy-calls --brief \
-        | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/ploidy_dir/
+    ploidy_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/ploidy_dir")
+
+    # turn describe output into id:/path/to/file to download with dir structure
+    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $ploidy_files)
+
+    # build aggregated directory structure and download all files
+    cmds=$(for f in  $files; do \
+        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
+        echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
+
+    echo $cmds | xargs -n1 -P${THREADS} bash -c
+
+
+    # # mkdir -p /home/dnanexus/in/basecounts
+    # # dx find data --project $DX_WORKSPACE_ID --name *hdf5 --brief \
+    # #     | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/basecounts/
+
+    # # Get ploidy calls
+    # mkdir -p /home/dnanexus/in/ploidy_dir
+    # dx find data --path $DX_WORKSPACE_ID:ploidy_dir/ploidy-calls --brief \
+    #     | xargs -n1 -P$(nproc --all) dx download --no-progress -o /home/dnanexus/in/ploidy_dir/
 
     # dx download -r $DX_WORKSPACE_ID:ploidy_dir/ploidy-calls -o /home/dnanexus/in/ploidy_dir/
 
