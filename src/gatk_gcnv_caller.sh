@@ -439,11 +439,11 @@ _launch_sub_jobs() {
         # Bump instance type up for large interval lists
         interval_num=$(grep -v "^@" $interval | wc -l)
         if [ $interval_num -gt 15000 ]; then
-            instance="mem1_ssd1_v2_x72"
-        elif [ $interval_num -gt 10000 ]; then
             instance="mem1_ssd1_v2_x36"
-        else
+        elif [ $interval_num -gt 10000 ]; then
             instance="mem1_ssd1_v2_x16"
+        else
+            instance="mem1_ssd1_v2_x8"
         fi
 
         dx-jobutil-new-job _sub_job \
