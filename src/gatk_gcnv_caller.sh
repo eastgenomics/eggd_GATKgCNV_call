@@ -75,10 +75,10 @@ _download_parent_job_inputs() {
         | xargs -n1 -P $PROCESSES dx download --no-progress -o inputs/bams/
 
     duration=$SECONDS
-    total_size=$(du -sh /home/dnanexus/inputs/bams | cut -f1)
-    total_files=$(find inputs/bams -type f | wc -l)
+    total_size=$(du -sh /home/dnanexus/inputs/ | cut -f1)
+    total_files=$(find inputs/ -type f | wc -l)
 
-    echo "Downloaded ${total_files} bam/bai files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
+    echo "Downloaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
     echo "All input files have downloaded to inputs/"
 }
 
@@ -190,7 +190,7 @@ _call_GATK_FilterIntervals() {
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     local batch_input
-    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
         | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
@@ -199,7 +199,7 @@ _call_GATK_FilterIntervals() {
         -L /data/beds/preprocessed.interval_list \
         -imr OVERLAPPING_ONLY \
         --annotated-intervals /data/beds/annotated_intervals.tsv \
-        $batch_input  $FilterIntervals_args \
+        $batch_input $FilterIntervals_args \
         -O /data/beds/filtered.interval_list \
         --verbosity WARNING
 
@@ -324,7 +324,7 @@ _call_GATK_GermlineCNVCaller() {
     else
         # Set off cnv_calling together in the parent job
         local batch_input
-        batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+        batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
             | sed 's/^/--input \/data\/basecounts\//g')
 
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
@@ -350,9 +350,9 @@ _call_GATKPostProcessGermlineCNVCalls() {
     --calls-shard-path <File>     List of paths to GermlineCNVCaller call directories. This argument must be specified at least once. Required.
     --contig-ploidy-calls <File>  Path to contig-ploidy calls directory (output of DetermineGermlineContigPloidy). Required.
     --model-shard-path <File>     List of paths to GermlineCNVCaller model directories. This argument must be specified at least once. Required.
-    --output-denoised-copy-ratios <File> Output denoised copy ratio file.  Required.
-    --output-genotyped-intervals <File>  Output intervals VCF file.  Required.
-    --output-genotyped-segments <File> Output segments VCF file.  Required.
+    --output-denoised-copy-ratios <File> Output denoised copy ratio file. Required.
+    --output-genotyped-intervals <File> Output intervals VCF file. Required.
+    --output-genotyped-segments <File> Output segments VCF file. Required.
     '''
     mark-section "Running PostprocessGermlineCNVCalls"
     mkdir inputs/vcfs
@@ -373,7 +373,7 @@ _call_GATKPostProcessGermlineCNVCalls() {
     index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
 
     # export if set to be available to sub shells in parallel
-    if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
+    if [[ -n "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
 
     SECONDS=0
     parallel --jobs $PROCESSES '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
@@ -487,10 +487,10 @@ _get_sub_job_output() {
     gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV-dir")
 
     # turn describe output into id:/path/to/file to download with dir structure
-    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $gCNV_files)
+    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $gCNV_files)
 
     # build aggregated directory structure and download all files
-    cmds=$(for f in  $files; do \
+    cmds=$(for f in $files; do \
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
         echo "'mkdir -p inputs/$dir && dx download --no-progress $id -o inputs/$path'"; done)
 
@@ -532,7 +532,7 @@ _sub_job() {
     _sub_job_download_inputs
 
     # Make basecount batch string
-    batch_input=$(find in/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+    batch_input=$(find in/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
         | sed 's/^/--input \/data\/basecounts\//g')
 
     # Load the GATK docker image
@@ -585,8 +585,8 @@ _sub_job_download_inputs() {
 
     # turn describe output into id:/path/to/file to download with dir structure,
     # build aggregated directory structure and download all files to given directory path
-    basecount_files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $basecount_files)
-    ploidy_files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $ploidy_files)
+    basecount_files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $basecount_files)
+    ploidy_files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $ploidy_files)
 
     cmds=$(for f in $basecount_files $ploidy_files; do \
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
