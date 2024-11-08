@@ -421,15 +421,15 @@ _launch_sub_jobs() {
     tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
 
     SECONDS=0
-    echo "Uploading polidy and base counts for sub jobs"
+    echo "Uploading ploidy and basecounts for sub jobs"
     export -f _upload_single_file  # required to be accessible to xargs sub shell
     find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f \
-        | xargs -P $(nproc --all) -n1 -I{} bash -c "_upload_single_file {} _ false"
+        | xargs -P $PROCESSES -n1 -I{} bash -c "_upload_single_file {} _ false"
 
     duration=$SECONDS
     echo "Uploaded ploidy and base count files in $(($duration / 60))m$(($duration % 60))s"
 
-    for interval in $( find /home/dnanexus/inputs/scatter-dir -name "scattered.interval_list" ); do
+    for interval in $( find /home/dnanexus/inputs/scatter-dir -type f -name "scattered.interval_list" ); do
         job_name=$(grep -Po 'chr[0-9XY]+' <<< "$interval")
         interval_file=$(dx upload --brief $interval)
 
