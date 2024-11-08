@@ -26,8 +26,8 @@ main() {
 
     _download_parent_job_inputs
 
-    # Optional to ho job after downloading all input files
-    if [ "$debug_fail_start" == 'true' ]; then exit 1; fi
+    # Optional to hold job after downloading all input files
+    if [ "$debug_fail_start" == 'true' ]; then echo "exiting due to -idebug_fail_start=true"; exit 1; fi
 
     _call_GATK_CollectReadCounts
     _call_GATK_FilterIntervals
@@ -43,7 +43,7 @@ main() {
     _call_generate_gcnv_bed
     _format_output_files_for_upload
 
-    if [ "$debug_fail_end" == 'true' ]; then exit 1; fi
+    if [ "$debug_fail_end" == 'true' ]; then echo "exiting due to -idebug_fail_end=true"; exit 1; fi
 
     _upload_final_output
 }
