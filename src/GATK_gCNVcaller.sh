@@ -77,7 +77,7 @@ main() {
     # 1. Run CollectReadCounts:
     # takes one bam (and its index) file at a time along with the targets.interval_list
     mark-section "Running CollectReadCounts for all input bams"
-    mkdir inputs/base_counts
+    mkdir inputs/basecounts
 
     SECONDS=0
     find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs $THREADS \
@@ -90,16 +90,16 @@ main() {
         -L /data/beds/preprocessed.interval_list \
         -imr OVERLAPPING_ONLY \
         '"$CollectReadCounts_args"' \
-        -O /data/base_counts/${sample_name}_basecount.hdf5'
+        -O /data/basecounts/${sample_name}_basecount.hdf5'
 
     duration=$SECONDS
     echo "CollectReadCounts completed in $(($duration / 60))m$(($duration % 60))s"
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     batch_input=""
-    for base_count in inputs/base_counts/*_basecount.hdf5; do
+    for base_count in inputs/basecounts/*_basecount.hdf5; do
         sample_file=$( basename $base_count )
-        batch_input+="--input /data/base_counts/${sample_file} "
+        batch_input+="--input /data/basecounts/${sample_file} "
     done
 
     # 2. Run FilterIntervals:
@@ -336,7 +336,7 @@ _call_cnvs() {
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
     # Get basecounts
-    base_count_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/base_counts")
+    base_count_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/basecounts")
 
     # turn describe output into id:/path/to/file to download with dir structure
     files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name'  <<< $base_count_files)
@@ -346,7 +346,7 @@ _call_cnvs() {
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
         echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
 
-    echo $cmds | xargs -n1 -P${THREADS} bash -c
+    echo $cmds | xargs -n1 -P$(nproc --all) bash -c
 
     # Get ploidy calls
     ploidy_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/ploidy_dir")
@@ -359,7 +359,7 @@ _call_cnvs() {
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
         echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
 
-    echo $cmds | xargs -n1 -P${THREADS} bash -c
+    echo $cmds | xargs -n1 -P$(nproc --all) bash -c
 
 
     # # mkdir -p /home/dnanexus/in/basecounts
@@ -440,11 +440,11 @@ _set_off_subjobs() {
     SECONDS=0
     echo "Uploading polidy and base counts for sub jobs"
     export -f _upload_single_file  # required to be accessible to xargs sub shell
-    find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/base_counts -type f \
+    find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f \
         | xargs -P $(nproc --all) -n1 -I{} bash -c "_upload_single_file {} _ false"
 
     # dx upload -rp /home/dnanexus/inputs/ploidy_dir
-    # dx upload -rp /home/dnanexus/inputs/base_counts
+    # dx upload -rp /home/dnanexus/inputs/basecounts
 
     duration=$SECONDS
     echo "Uploaded ploidy and base count files in $(($duration / 60))m$(($duration % 60))s"
