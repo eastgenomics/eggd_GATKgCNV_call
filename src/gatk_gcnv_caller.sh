@@ -54,7 +54,7 @@ _download_parent_job_inputs() {
     Download all required files for the parent job
     '''
     mark-section "Downloading inputs"
-    mkdir -p inputs/beds inputs/bams
+    mkdir -p inputs/{bams,beds}
 
     # Prior probabilities tsv file can be provided as input or a default file bundled with the app
     if [[ -n $prior_prob ]]
