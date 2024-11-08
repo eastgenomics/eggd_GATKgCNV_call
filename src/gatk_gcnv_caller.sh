@@ -207,7 +207,6 @@ _call_GATK_FilterIntervals() {
     duration=$SECONDS
     echo "FilterIntervals completed in $(($duration / 60))m$(($duration % 60))s"
 }
-
 _call_GATK_IntervalListToBed() {
     : '''
     Call GATK IntervalListToBed to generate bed files
@@ -291,7 +290,7 @@ _call_GATK_GermlineCNVCaller() {
             --VERBOSITY WARNING
 
         # Set off subjobs, will be held here until all complete
-        _set_off_subjobs
+        _launch_sub_jobs
     elif [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
         local chromosomes
@@ -308,20 +307,19 @@ _call_GATK_GermlineCNVCaller() {
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
 
             # Skip chromosome if no intervals present
-            if [[ -z $(grep -P '^'$i'\t' $ints | head -n1) ]]; then
+            if [[ -z $(grep -P "^${i}\t" $ints | head -n1) ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
             else
                 # Collect header & relevant lines for current chromosome
-                grep ^@ $ints > $chr_ints
-                grep -P '^'$i'\t' $ints >> $chr_ints
+                grep "^@" $ints > $chr_ints
+                grep -P "^${i}\t" $ints >> $chr_ints
             fi
-
         done
 
         echo "Completed collecting intervals for all chromosomes"
 
         # Set off subjobs, will be held here until all complete
-        _set_off_subjobs
+        _launch_sub_jobs
     else
         # Set off cnv_calling together in the parent job
         local batch_input
