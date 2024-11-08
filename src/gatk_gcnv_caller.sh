@@ -29,6 +29,7 @@ main() {
     # Optional to hold job after downloading all input files
     if [ "$debug_fail_start" == 'true' ]; then echo "exiting due to -idebug_fail_start=true"; exit 1; fi
 
+    # call all required GATK tools to call CNVs
     _call_GATK_CollectReadCounts
     _call_GATK_FilterIntervals
     _call_GATK_IntervalListToBed
@@ -463,6 +464,8 @@ _launch_sub_jobs() {
 
     duration=$SECONDS
     echo "All subjobs for GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
+
+    _get_sub_job_output
 }
 
 _get_sub_job_output() {
@@ -471,7 +474,7 @@ _get_sub_job_output() {
 
     Should only be called once all sub jobs have completed from the parent job.
     '''
-    mark-section "Downloading gCNV job output"
+    mark-section "Downloading gCNV job output from sub jobs"
 
     echo "Waiting 30 seconds to ensure all files are hopefully in a closed state..."
     sleep 30
@@ -608,7 +611,7 @@ _sub_job_upload_outputs() {
 
     mkdir -p out/gCNV-dir
     mv /home/dnanexus/in/gCNV-dir/$name-calls out/gCNV-dir/
-    mv /home/dnanexus/in/gCNV-dir/$name-model out//gCNV-dir/
+    mv /home/dnanexus/in/gCNV-dir/$name-model out/gCNV-dir/
 
     total_files=$(find out/ -type f | wc -l)
     total_size=$(du -sh out/ | cut -f 1)
