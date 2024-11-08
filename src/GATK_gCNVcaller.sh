@@ -413,8 +413,9 @@ _set_off_subjobs() {
 
     SECONDS=0
     echo "Uploading polidy and base counts for sub jobs"
+    export -f _upload_single_file  # required to be accessible to xargs sub shell
     find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/base_counts -type f \
-        | xargs xargs -P ${cores} -n1 -I{} bash -c "_upload_single_file {} _ false"
+        | xargs -P $(nproc --all) -n1 -I{} bash -c "_upload_single_file {} _ false"
 
     # dx upload -rp /home/dnanexus/inputs/ploidy_dir
     # dx upload -rp /home/dnanexus/inputs/base_counts
