@@ -49,7 +49,6 @@ main() {
     _upload_final_output
 }
 
-
 _download_parent_job_inputs() {
     : '''
     Download all required files for the parent job
@@ -106,17 +105,18 @@ _format_output_files_for_upload() {
 
 _upload_final_output() {
     : '''
-    Upload the final app output files
-
-    This is fairly quick as there are not many files and they are small, so using built in
-    parallel upload method
+    Upload the final app output files from /home/dnanexus/out and associate to app output spec field
     '''
     mark-section "Uploading final output"
 
-    SECONDS=0
-    dx-upload-all-outputs --parallel
-    duration=$SECONDS
+    # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
+    echo "{}" > job_output.json
 
+    SECONDS=0
+    find /home/dnanexus/out/ -type f | xargs -P $PROCESSES -n1 -I{} bash -c \
+        "_upload_single_file {} result_files true"
+
+    duration=$SECONDS
     total_files=$(find out/ -type f | wc -l)
     total_size=$(du -sh out/ | cut -f 1)
 
