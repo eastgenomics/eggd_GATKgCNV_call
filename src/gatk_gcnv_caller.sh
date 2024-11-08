@@ -575,6 +575,7 @@ _sub_job_download_inputs() {
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
+    set +x # suppress this going to the logs as its long
     # Get basecount and ploidy files uploaded into container by parent job
     basecount_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/basecounts")
     ploidy_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/ploidy_dir")
@@ -589,6 +590,7 @@ _sub_job_download_inputs() {
         echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
 
     echo $cmds | xargs -n1 -P $PROCESSES bash -c
+    set -x
 
     duration=$SECONDS
     total_files=$(find in/ -type f | wc -l)
