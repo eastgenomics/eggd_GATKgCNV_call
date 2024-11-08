@@ -274,7 +274,7 @@ _call_GATK_GermlineCNVCaller() {
     all sub jobs have completed.
     '''
     mark-section "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
-    mkdir inputs/gCNV-dir
+    mkdir inputs/gCNV
 
     local total_intervals
     total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
@@ -337,7 +337,7 @@ _call_GATK_GermlineCNVCaller() {
             $batch_input \
             --contig-ploidy-calls /data/ploidy_dir/ploidy-calls/ \
             --output-prefix CNV \
-            -O /data/gCNV-dir \
+            -O /data/gCNV \
             --verbosity WARNING
     fi
 }
@@ -361,10 +361,9 @@ _call_GATKPostProcessGermlineCNVCalls() {
     local batch_input_postprocess
     local models
 
-    batch_input_postprocess=""
     models=$(find inputs/gCNV -type d -name "*-model" -exec basename {} \; | cut -d'-' -f1)
-    batch_input_postprocess+=$(sed 's/^/ --model-shard-path \/data\/gCNV-dir\//g; s/$/-model/g' <<< $models)
-    batch_input_postprocess+=$(sed 's/^/ --calls-shard-path \/data\/gCNV-dir\//g; s/$/-calls/g' <<< $models)
+    batch_input_postprocess+=$(sed 's/^/ --model-shard-path \/data\/gCNV\//g; s/$/-model/g' <<< $models)
+    batch_input_postprocess+=$(sed 's/^/ --calls-shard-path \/data\/gCNV\//g; s/$/-calls/g' <<< $models)
 
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
     # index is created based on the number of input bams
@@ -484,7 +483,7 @@ _get_sub_job_output() {
 
     # files from sub jobs will be in the container- project context of the
     # current job ($DX_WORKSPACE-id) => search here for all the files
-    gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV-dir")
+    gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV")
 
     # turn describe output into id:/path/to/file to download with dir structure
     files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $gCNV_files)
@@ -498,7 +497,7 @@ _get_sub_job_output() {
 
     set -x
 
-    total=$(du -sh /home/dnanexus/inputs/gCNV-dir/ | cut -f1)
+    total=$(du -sh /home/dnanexus/inputs/gCNV/ | cut -f1)
     duration=$SECONDS
     echo "Downloaded $(wc -w <<< "${files}") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 }
@@ -552,7 +551,7 @@ _sub_job() {
         $batch_input \
         --contig-ploidy-calls /data/ploidy_dir/ploidy-calls/ \
         --output-prefix $name \
-        -O /data/gCNV-dir \
+        -O /data/gCNV \
         --verbosity WARNING
 
     duration=$SECONDS
@@ -609,9 +608,9 @@ _sub_job_upload_outputs() {
     '''
     mark-section "Uploading sub job output"
 
-    mkdir -p out/gCNV-dir
-    mv /home/dnanexus/in/gCNV-dir/$name-calls out/gCNV-dir/
-    mv /home/dnanexus/in/gCNV-dir/$name-model out/gCNV-dir/
+    mkdir -p out/gCNV
+    mv /home/dnanexus/in/gCNV/$name-calls out/gCNV/
+    mv /home/dnanexus/in/gCNV/$name-model out/gCNV/
 
     total_files=$(find out/ -type f | wc -l)
     total_size=$(du -sh out/ | cut -f 1)
