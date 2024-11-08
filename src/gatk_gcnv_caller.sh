@@ -112,6 +112,8 @@ _upload_final_output() {
     # create valid empty JSON file for job output, fixes https://github.com/eastgenomics/eggd_tso500/issues/19
     echo "{}" > job_output.json
 
+    export -f _upload_single_file  # required to be accessible to xargs sub shell
+
     SECONDS=0
     find /home/dnanexus/out/ -type f | xargs -P $PROCESSES -n1 -I{} bash -c \
         "_upload_single_file {} result_files true"
