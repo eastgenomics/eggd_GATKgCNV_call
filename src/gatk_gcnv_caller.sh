@@ -26,7 +26,7 @@ main() {
 
     _download_parent_job_inputs
 
-    # Optional to hold job after downloading all input files
+    # Optional to ho job after downloading all input files
     if [ "$debug_fail_start" == 'true' ]; then exit 1; fi
 
     _call_GATK_CollectReadCounts
@@ -116,7 +116,10 @@ _upload_final_output() {
     dx-upload-all-outputs --parallel
     duration=$SECONDS
 
-    echo "Uploaded files in $(($duration / 60))m$(($duration % 60))s"
+    total_files=$(find out/ -type f | wc -l)
+    total_size=$(du -sh out/ | cut -f 1)
+
+    echo "Uploaded ${total_files} (${total_size}) files in $(($duration / 60))m$(($duration % 60))s"
 }
 
 _upload_single_file() {
@@ -159,7 +162,7 @@ _call_GATK_CollectReadCounts() {
     mkdir inputs/basecounts
 
     # export if set to be available to sub shells in parallel
-    if [[ -n "$CollectReadCounts_args" ]]; then export $CollectReadCounts_args; fi
+    if [[ -n "$CollectReadCounts_args" ]]; then export "${CollectReadCounts_args?}"; fi
 
     SECONDS=0
     find inputs/bams/ -name "*.bam" | parallel -I filename --max-args 1 --jobs $PROCESSES \
@@ -186,7 +189,8 @@ _call_GATK_FilterIntervals() {
 
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     local batch_input
-    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; | sed 's/^/--input \/data\/basecounts\//g')
+    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+        | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
@@ -201,11 +205,13 @@ _call_GATK_FilterIntervals() {
     duration=$SECONDS
     echo "FilterIntervals completed in $(($duration / 60))m$(($duration % 60))s"
 }
+
 _call_GATK_IntervalListToBed() {
     : '''
     Call GATK IntervalListToBed to generate bed files
     '''
     mark-section "Running IntervalListToBed to identify excluded intervals from CNV calling on this run"
+
     SECONDS=0
     docker run \
         -v /home/dnanexus/inputs:/data \
@@ -235,7 +241,7 @@ _call_GATK_DetermineGermlineContigPloidy() {
     mkdir inputs/ploidy_dir
 
     local batch_input
-    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5'  -exec basename {} \; \
+    batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
         | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
@@ -366,7 +372,7 @@ _call_GATKPostProcessGermlineCNVCalls() {
     index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
 
     # export if set to be available to sub shells in parallel
-    if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export $PostprocessGermlineCNVCalls_args; fi
+    if [[ -n  "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
 
     SECONDS=0
     parallel --jobs $PROCESSES '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
@@ -393,6 +399,7 @@ _call_generate_gcnv_bed() {
     Call the generate_gcnv_bed.py script to generate CNV visualisation beds from the copy ratio tsvs
     '''
     mark-section "Generating gCNV copy ratio visualisation files"
+
     local denoised_copy_ratio_files
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
 
@@ -412,12 +419,13 @@ _launch_sub_jobs() {
     '''
     mark-section "Launching subjobs to run GATK GermlineCNVCaller"
 
+    export -f _upload_single_file  # required to be accessible to xargs sub shell
+
     # Upload input files to workspace container so subjobs can access them
     tsv=$( dx upload --brief /home/dnanexus/inputs/beds/annotated_intervals.tsv )
 
     SECONDS=0
     echo "Uploading ploidy and basecounts for sub jobs"
-    export -f _upload_single_file  # required to be accessible to xargs sub shell
     find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f \
         | xargs -P $PROCESSES -n1 -I{} bash -c "_upload_single_file {} _ false"
 
@@ -438,13 +446,13 @@ _launch_sub_jobs() {
             instance="mem1_ssd1_v2_x16"
         fi
 
-        dx-jobutil-new-job _call_cnvs \
+        dx-jobutil-new-job _sub_job \
             -iannotation_tsv="$tsv" \
             -iinterval_list="$interval_file" \
             -iGATK_docker="$GATK_docker" \
             -iGermlineCNVCaller_args="$GermlineCNVCaller_args" \
             --instance-type "$instance" \
-            --extra-args='{"priority": "high"}' \
+            --extra-args '{"priority": "high"}' \
             --name "$job_name" >> job_ids
     done
 
@@ -489,17 +497,19 @@ _get_sub_job_output() {
 
     total=$(du -sh /home/dnanexus/inputs/gCNV-dir/ | cut -f1)
     duration=$SECONDS
-    echo "Downloaded $(wc -w <<< ${files}) files (${total}) in $(($duration / 60))m$(($duration % 60))s"
+    echo "Downloaded $(wc -w <<< "${files}") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 }
 
 _sub_job() {
     : '''
-    App code for each sub job to run GATK GermlineCNVCaller per chromosome / interval
+    App code for each sub job to run GATK GermlineCNVCaller per chromosome / interval.
 
     The annotation tsv, interval list and GATK Docker image are provided as inputs to the app,
     but both the basecount and ploidy files are uploaded from the parent job and are available
     in the container, so are downloaded separately.
     '''
+    mark-section "Starting sub job to run GATK GermlineCNVCaller"
+
     # prefixes all lines of commands written to stdout with datetime
     PS4='\000[$(date)]\011'
     export TZ=Europe/London
@@ -523,11 +533,11 @@ _sub_job() {
         | sed 's/^/--input \/data\/basecounts\//g')
 
     # Load the GATK docker image
-    mark-section "Loading GATK Docker image"
     docker load -i /home/dnanexus/in/GATK_docker/GATK*.tar.gz
     export GATK_image=$(docker images --format="{{.Repository}} {{.ID}}" | grep "^broad" | cut -d' ' -f2)
 
-    # Run CNV caller
+    mark-section "Running GATK GermlineCNVCaller"
+
     SECONDS=0
     /usr/bin/time -v docker run -v /home/dnanexus/in/:/data/ \
         "$GATK_image" gatk GermlineCNVCaller \
@@ -557,6 +567,8 @@ _sub_job_download_inputs() {
         - basecount files
         - ploidy files
     '''
+    mark-section "Downloading files to sub job"
+
     SECONDS=0
     dx-download-all-inputs --parallel
 
@@ -581,7 +593,7 @@ _sub_job_download_inputs() {
     duration=$SECONDS
     total_files=$(find in/ -type f | wc -l)
     total_size=$(du -sh in/ | cut -f 1)
-    echo "Downloaded $total_files files ($total_size) in $(($duration / 60))m$(($duration % 60))s"
+    echo "Downloaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
 }
 
 _sub_job_upload_outputs() {
@@ -591,6 +603,7 @@ _sub_job_upload_outputs() {
     Uploads required output back to container to be downloaded back to parent job for post processing
     '''
     mark-section "Uploading sub job output"
+
     mkdir -p out/gCNV-dir
     mv /home/dnanexus/in/gCNV-dir/$name-calls out/gCNV-dir/
     mv /home/dnanexus/in/gCNV-dir/$name-model out//gCNV-dir/
