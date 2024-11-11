@@ -14,8 +14,8 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 # control how many operations to open in parallel, for download / upload set one per CPU core
 # limited to 32 to not (hopefully) hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
-DOWNLOAD_PROCESSES=$(nproc --all)
-if (( DOWNLOAD_PROCESSES > 32 )); then DOWNLOAD_PROCESSES=32; fi
+IO_PROCESSES=$(nproc --all)
+if (( IO_PROCESSES > 32 )); then IO_PROCESSES=32; fi
 
 
 main() {
@@ -76,7 +76,7 @@ _download_parent_job_inputs() {
 
     SECONDS=0
     echo "${bambais[@]}" | jq -r '.["$dnanexus_link"]' \
-        | xargs -n1 -P $DOWNLOAD_PROCESSES dx download --no-progress -o inputs/bams/
+        | xargs -n1 -P $IO_PROCESSES dx download --no-progress -o inputs/bams/
 
     duration=$SECONDS
     total_size=$(du -sh /home/dnanexus/inputs/ | cut -f1)
@@ -517,38 +517,14 @@ _get_sub_job_output() {
     sleep 30
 
     SECONDS=0
-    # suppress this going to the logs as its long
-    # set +x # TODO - uncomment
-
-    # files from sub jobs will be in the container- project context of the
-    # current job ($DX_WORKSPACE-id) => search here for all the files
-    # gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV")
-
-    # turn describe output into id:/path/to/file to download with dir structure
-    # files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $gCNV_files)
-
-    # build aggregated directory structure and download all files
-    # cmds=$(for f in $files; do \
-    #     id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
-    #     echo "'mkdir -p inputs/$dir && dx download --no-progress $DX_WORKSPACE_ID:$id -o inputs/$path'"; done)
-
-    # echo $cmds | xargs -n1 -P${DOWNLOAD_PROCESSES} bash -c
-
-    # echo $sub_job_tars | xargs -n1 -P $DOWNLOAD_PROCESSES dx download --no-progress --output tars/
-    # find tars/ -type f -name "*tar" | xargs -n1 -P4 -I{} sudo tar xf {} -C inputs/
-
     mkdir tars
 
     sub_job_tars=$(dx find data --json --path "$DX_WORKSPACE_ID:/gCNV" | jq -r '.[].id')
-    echo "$sub_job_tars" | xargs -P $DOWNLOAD_PROCESSES -n1 -I{} sh -c "dx cat $DX_WORKSPACE_ID:{} | tar xf - -C inputs"
-
-    sleep 10
-    ls
-    sleep 10
-    find inputs/ -type d
+    echo "$sub_job_tars" | xargs -P $IO_PROCESSES -n1 -I{} sh -c "dx cat $DX_WORKSPACE_ID:{} | tar xf - -C inputs"
 
     total=$(du -sh /home/dnanexus/inputs/gCNV/ | cut -f1)
     duration=$SECONDS
+
     echo "Downloaded and unpacked $(wc -w <<< "${sub_job_tars}") tar files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 }
 
@@ -570,15 +546,8 @@ _sub_job() {
     kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
     /usr/bin/dx-dstat 10
 
-    # control how many operations to open in parallel for download / upload, set one per CPU core
-    PROCESSES=$(nproc --all)
-    DOWNLOAD_PROCESSES=$(nproc --all)
-    if (( DOWNLOAD_PROCESSES > 50 )); then DOWNLOAD_PROCESSES=50; fi
-
     # get chromosome name for output prefix
     name=$(jq -r '.name' dnanexus-job.json)
-
-    # export -f _upload_single_file  # required to be accessible to xargs sub shell
 
     _sub_job_download_inputs
 
@@ -626,13 +595,17 @@ _sub_job_download_inputs() {
     '''
     mark-section "Downloading files to sub job"
 
+    # set no. of parallel processes to open fow downloading, hard limit at 32 if > 32 cores
+    IO_PROCESSES=$(nproc --all)
+    if (( IO_PROCESSES > 32 )); then IO_PROCESSES=32; fi
+
     SECONDS=0
     dx-download-all-inputs --parallel
 
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
-    set +x # suppress this going to the logs as its long  # TODO - uncomment
+    set +x # suppress this going to the logs as its long
 
     # Get basecount and ploidy files uploaded into container by parent job
     basecount_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/basecounts")
@@ -647,12 +620,13 @@ _sub_job_download_inputs() {
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
         echo "'mkdir -p in/$dir && dx download --no-progress $DX_WORKSPACE_ID:$id -o in/$path'"; done)
 
-    echo $cmds | xargs -n1 -P $DOWNLOAD_PROCESSES bash -c
+    echo $cmds | xargs -n1 -P $IO_PROCESSES bash -c
     set -x
 
     duration=$SECONDS
     total_files=$(find in/ -type f | wc -l)
     total_size=$(du -sh in/ | cut -f 1)
+
     echo "Downloaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
 }
 
@@ -678,9 +652,6 @@ _sub_job_upload_outputs() {
 
     name=$(jq -r '.name' dnanexus-job.json )
     time tar -cf "${name}.tar" gCNV/
-
-    # find /home/dnanexus/out/ -type f | xargs -P $UPLOAD_PROCESSES -n1 -I{} bash -c \
-    #     "_upload_single_file {} _ false"
     time dx upload "${name}.tar" --parents --brief --path gCNV/
 
     duration=$SECONDS
