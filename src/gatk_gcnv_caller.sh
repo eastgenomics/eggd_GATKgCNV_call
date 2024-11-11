@@ -11,8 +11,12 @@ export TZ=Europe/London
 kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 /usr/bin/dx-dstat 10
 
-# control how many operations to open in parallel for download / upload, set one per CPU core
+# control how many operations to open in parallel, for download / upload set one per CPU core
+# limited to 50 to not hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
+DOWNLOAD_PROCESSES=$(nproc --all)
+if (( DOWNLOAD_PROCESSES > 50 )); then DOWNLOAD_PROCESSES=50; fi
+
 
 main() {
     mark-section "Installing packages and loading GATK Docker image"
@@ -71,7 +75,7 @@ _download_parent_job_inputs() {
 
     SECONDS=0
     echo "${bambais[@]}" | jq -r '.["$dnanexus_link"]' \
-        | xargs -n1 -P $PROCESSES dx download --no-progress -o inputs/bams/
+        | xargs -n1 -P $DOWNLOAD_PROCESSES dx download --no-progress -o inputs/bams/
 
     duration=$SECONDS
     total_size=$(du -sh /home/dnanexus/inputs/ | cut -f1)
@@ -363,9 +367,17 @@ _call_GATKPostProcessGermlineCNVCalls() {
     local batch_input_postprocess
     local models
 
-    models=$(find inputs/gCNV -type d -name "*-model" -exec basename {} \; | cut -d'-' -f1)
-    batch_input_postprocess+=$(sed 's/^/ --model-shard-path \/data\/gCNV\//g; s/$/-model/g' <<< $models)
-    batch_input_postprocess+=$(sed 's/^/ --calls-shard-path \/data\/gCNV\//g; s/$/-calls/g' <<< $models)
+    # models=$(find inputs/gCNV -type d -name "*-model" -exec basename {} \; | cut -d'-' -f1)
+    # batch_input_postprocess+=$(sed 's/^/ --model-shard-path \/data\/gCNV\//g; s/$/-model/g' <<< $models)
+    # batch_input_postprocess+=$(sed 's/^/ --calls-shard-path \/data\/gCNV\//g; s/$/-calls/g' <<< $models)
+    # batch_input_postprocess=$(sed -z "s/\n/ /g" <<< "$batch_input_postprocess")
+
+    batch_input_postprocess=""
+    for shard_dir in inputs/gCNV/*-model; do
+        prefix=$( basename $shard_dir | cut -d '-' -f1 )
+        batch_input_postprocess+="--calls-shard-path /data/gCNV/$prefix-calls "
+        batch_input_postprocess+="--model-shard-path /data/gCNV/$prefix-model "
+    done
 
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
     # index is created based on the number of input bams
@@ -462,7 +474,6 @@ _launch_sub_jobs() {
     SECONDS=0
     echo "$(wc -l job_ids) jobs launched, holding job until all to complete..."
     dx wait --from-file job_ids
-    exit 0
 
     duration=$SECONDS
     echo "All subjobs for GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
@@ -496,7 +507,7 @@ _get_sub_job_output() {
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
         echo "'mkdir -p inputs/$dir && dx download --no-progress $id -o inputs/$path'"; done)
 
-    echo $cmds | xargs -n1 -P${PROCESSES} bash -c
+    echo $cmds | xargs -n1 -P${DOWNLOAD_PROCESSES} bash -c
 
     set -x
 
@@ -514,7 +525,6 @@ _sub_job() {
     in the container, so are downloaded separately.
     '''
     mark-section "Starting sub job to run GATK GermlineCNVCaller"
-    exit 0
 
     # prefixes all lines of commands written to stdout with datetime
     PS4='\000[$(date)]\011'
@@ -526,6 +536,8 @@ _sub_job() {
 
     # control how many operations to open in parallel for download / upload, set one per CPU core
     PROCESSES=$(nproc --all)
+    DOWNLOAD_PROCESSES=$(nproc --all)
+    if (( DOWNLOAD_PROCESSES > 50 )); then DOWNLOAD_PROCESSES=50; fi
 
     # get chromosome name for output prefix
     name=$( cat dnanexus-job.json | jq -r '.name' )
@@ -595,7 +607,7 @@ _sub_job_download_inputs() {
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
         echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
 
-    echo $cmds | xargs -n1 -P $PROCESSES bash -c
+    echo $cmds | xargs -n1 -P $DOWNLOAD_PROCESSES bash -c
     set -x
 
     duration=$SECONDS
@@ -621,7 +633,7 @@ _sub_job_upload_outputs() {
 
     SECONDS=0
     echo "Uploading sample output"
-    find /home/dnanexus/out/ -type f | xargs -P $PROCESSES -n1 -I{} bash -c \
+    find /home/dnanexus/out/ -type f | xargs -P $DOWNLOAD_PROCESSES -n1 -I{} bash -c \
         "_upload_single_file {} _ false"
 
     duration=$SECONDS
