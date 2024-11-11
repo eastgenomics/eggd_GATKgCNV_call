@@ -15,7 +15,7 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 # limited to 50 to not hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
 DOWNLOAD_PROCESSES=$(nproc --all)
-if (( DOWNLOAD_PROCESSES > 50 )); then DOWNLOAD_PROCESSES=50; fi
+if (( DOWNLOAD_PROCESSES > 36 )); then DOWNLOAD_PROCESSES=36; fi
 
 
 main() {
@@ -381,6 +381,9 @@ _call_GATKPostProcessGermlineCNVCalls() {
         batch_input_postprocess+="--model-shard-path /data/gCNV/$prefix-model "
     done
 
+    # TODO - maybe remove this if it doesn't change behaviour
+    export $batch_input_postprocess
+
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
     # index is created based on the number of input bams
     # triple colon at the end is the parallel way to provide an array of integers
@@ -509,7 +512,8 @@ _get_sub_job_output() {
     sleep 30
 
     SECONDS=0
-    set +x  # suppress this going to the logs as its long
+    # suppress this going to the logs as its long
+    # set +x # TODO - uncomment
 
     # files from sub jobs will be in the container- project context of the
     # current job ($DX_WORKSPACE-id) => search here for all the files
@@ -609,7 +613,8 @@ _sub_job_download_inputs() {
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
-    set +x # suppress this going to the logs as its long
+    # set +x # suppress this going to the logs as its long  # TODO - uncomment
+
     # Get basecount and ploidy files uploaded into container by parent job
     basecount_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/basecounts")
     ploidy_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/ploidy_dir")
@@ -647,9 +652,13 @@ _sub_job_upload_outputs() {
     total_files=$(find out/ -type f | wc -l)
     total_size=$(du -sh out/ | cut -f 1)
 
+    # strictly limit upload processes to not hit limits across multiple sub jobs
+    UPLOAD_PROCESSES=$(nproc --all)
+    if (( DOWNLOAD_PROCESSES > 8 )); then UPLOAD_PROCESSES=$(bc <<< "${UPLOAD_PROCESSES} / 2"); fi
+
     SECONDS=0
     echo "Uploading sample output"
-    find /home/dnanexus/out/ -type f | xargs -P $DOWNLOAD_PROCESSES -n1 -I{} bash -c \
+    find /home/dnanexus/out/ -type f | xargs -P $UPLOAD_PROCESSES -n1 -I{} bash -c \
         "_upload_single_file {} _ false"
 
     duration=$SECONDS
