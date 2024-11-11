@@ -329,6 +329,7 @@ _call_GATK_GermlineCNVCaller() {
         _launch_sub_jobs
     else
         # Set off cnv_calling together in the parent job
+        echo "Running GermlineCNVCaller in parent job without scattering"
         local batch_input
         batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
             | sed 's/^/--input \/data\/basecounts\//g')
@@ -448,7 +449,7 @@ _launch_sub_jobs() {
 
     for interval in $( find /home/dnanexus/inputs/scatter-dir -type f -name "scattered.interval_list" ); do
         job_name=$(grep -Po 'chr[0-9XY]+' <<< "$interval")
-        interval_file=$(dx upload --brief $interval)
+        interval_file=$(dx upload --brief "$interval")
 
         # Bump instance type up for large interval lists, set from dxapp.json
         interval_num=$(grep -v "^@" $interval | wc -l)
