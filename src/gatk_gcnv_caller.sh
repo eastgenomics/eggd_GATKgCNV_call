@@ -12,10 +12,10 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 /usr/bin/dx-dstat 10
 
 # control how many operations to open in parallel, for download / upload set one per CPU core
-# limited to 50 to not hit rate limits for API queries on large instances
+# limited to 32 to not (hopefully) hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
 DOWNLOAD_PROCESSES=$(nproc --all)
-if (( DOWNLOAD_PROCESSES > 36 )); then DOWNLOAD_PROCESSES=36; fi
+if (( DOWNLOAD_PROCESSES > 32 )); then DOWNLOAD_PROCESSES=32; fi
 
 
 main() {
@@ -198,7 +198,7 @@ _call_GATK_FilterIntervals() {
     # prepare a batch_input string that has all sample_basecount.tsv file as an input
     local batch_input
     batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
-        | sed 's/^/--input \/data\/basecounts\//g')
+        | sort | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
     /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
@@ -250,7 +250,7 @@ _call_GATK_DetermineGermlineContigPloidy() {
 
     local batch_input
     batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
-        | sed 's/^/--input \/data\/basecounts\//g')
+        | sort | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
     /usr/bin/time -v docker run \
@@ -333,7 +333,7 @@ _call_GATK_GermlineCNVCaller() {
         echo "Running GermlineCNVCaller in parent job without scattering"
         local batch_input
         batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
-            | sed 's/^/--input \/data\/basecounts\//g')
+            | sort | sed 's/^/--input \/data\/basecounts\//g')
 
         /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
             "$GATK_image" gatk GermlineCNVCaller \
@@ -369,32 +369,37 @@ _call_GATKPostProcessGermlineCNVCalls() {
     local batch_input_postprocess
     local models
 
-    # models=$(find inputs/gCNV -type d -name "*-model" -exec basename {} \; | cut -d'-' -f1)
-    # batch_input_postprocess+=$(sed 's/^/ --model-shard-path \/data\/gCNV\//g; s/$/-model/g' <<< $models)
-    # batch_input_postprocess+=$(sed 's/^/ --calls-shard-path \/data\/gCNV\//g; s/$/-calls/g' <<< $models)
-    # batch_input_postprocess=$(sed -z "s/\n/ /g" <<< "$batch_input_postprocess")
+    models=$(find inputs/gCNV -type d -name "*-model" -exec basename {} \; | cut -d'-' -f1)
+    batch_input_postprocess+=$(sed 's/^/ --model-shard-path \/data\/gCNV\//g; s/$/-model/g' <<< $models)
+    batch_input_postprocess+=$(sed 's/^/ --calls-shard-path \/data\/gCNV\//g; s/$/-calls/g' <<< $models)
+    batch_input_postprocess=$(sed -z "s/\n/ /g" <<< "$batch_input_postprocess")
 
-    batch_input_postprocess=""
-    for shard_dir in inputs/gCNV/*-model; do
-        prefix=$( basename $shard_dir | cut -d '-' -f1 )
-        batch_input_postprocess+="--calls-shard-path /data/gCNV/$prefix-calls "
-        batch_input_postprocess+="--model-shard-path /data/gCNV/$prefix-model "
-    done
+    # batch_input_postprocess=""
+    # for shard_dir in inputs/gCNV/*-model; do
+    #     prefix=$( basename $shard_dir | cut -d '-' -f1 )
+    #     batch_input_postprocess+="--calls-shard-path /data/gCNV/$prefix-calls "
+    #     batch_input_postprocess+="--model-shard-path /data/gCNV/$prefix-model "
+    # done
 
     # TODO - maybe remove this if it doesn't change behaviour
-    export $batch_input_postprocess
+    # if [[ -n "$batch_input_postprocess" ]];then
+    #     export $batch_input_postprocess
+    # fi
 
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
     # index is created based on the number of input bams
     # triple colon at the end is the parallel way to provide an array of integers
-    local index
-    index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
+    # local index
+    # index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
+
+    sample_num=$(ls inputs/bams/*.bam | wc -l)
+    index=$(expr $sample_num - 1)
 
     # export if set to be available to sub shells in parallel
     if [[ -n "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
 
     SECONDS=0
-    parallel --jobs $PROCESSES '/usr/bin/time -v docker run -v /home/dnanexus/inputs:/data $GATK_image \
+    parallel --jobs $PROCESSES 'docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         '"$PostprocessGermlineCNVCalls_args"' \
@@ -517,23 +522,34 @@ _get_sub_job_output() {
 
     # files from sub jobs will be in the container- project context of the
     # current job ($DX_WORKSPACE-id) => search here for all the files
-    gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV")
+    # gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV")
 
     # turn describe output into id:/path/to/file to download with dir structure
-    files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $gCNV_files)
+    # files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $gCNV_files)
 
     # build aggregated directory structure and download all files
-    cmds=$(for f in $files; do \
-        id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
-        echo "'mkdir -p inputs/$dir && dx download --no-progress $id -o inputs/$path'"; done)
+    # cmds=$(for f in $files; do \
+    #     id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
+    #     echo "'mkdir -p inputs/$dir && dx download --no-progress $DX_WORKSPACE_ID:$id -o inputs/$path'"; done)
 
-    echo $cmds | xargs -n1 -P${DOWNLOAD_PROCESSES} bash -c
+    # echo $cmds | xargs -n1 -P${DOWNLOAD_PROCESSES} bash -c
 
-    set -x
+    # echo $sub_job_tars | xargs -n1 -P $DOWNLOAD_PROCESSES dx download --no-progress --output tars/
+    # find tars/ -type f -name "*tar" | xargs -n1 -P4 -I{} sudo tar xf {} -C inputs/
+
+    mkdir tars
+
+    sub_job_tars=$(dx find data --json --path "$DX_WORKSPACE_ID:/gCNV" | jq -r '.[].id')
+    echo "$sub_job_tars" | xargs -P $DOWNLOAD_PROCESSES -n1 -I{} sh -c "dx cat $DX_WORKSPACE_ID:{} | tar xf - -C inputs"
+
+    sleep 10
+    ls
+    sleep 10
+    find inputs/ -type d
 
     total=$(du -sh /home/dnanexus/inputs/gCNV/ | cut -f1)
     duration=$SECONDS
-    echo "Downloaded $(wc -w <<< "${files}") files (${total}) in $(($duration / 60))m$(($duration % 60))s"
+    echo "Downloaded and unpacked $(wc -w <<< "${sub_job_tars}") tar files (${total}) in $(($duration / 60))m$(($duration % 60))s"
 }
 
 _sub_job() {
@@ -560,15 +576,18 @@ _sub_job() {
     if (( DOWNLOAD_PROCESSES > 50 )); then DOWNLOAD_PROCESSES=50; fi
 
     # get chromosome name for output prefix
-    name=$( cat dnanexus-job.json | jq -r '.name' )
+    name=$(jq -r '.name' dnanexus-job.json)
 
-    export -f _upload_single_file  # required to be accessible to xargs sub shell
+    # export -f _upload_single_file  # required to be accessible to xargs sub shell
 
     _sub_job_download_inputs
 
     # Make basecount batch string
+    # n.b. this *must* be sorted in the same order across all sub jobs as GATK assigns a sample
+    # index for the order in which the sample hdf5 files are provided, if they are not the same
+    # when calling PostProcessCNVCalls this will raise `The sample name is not the same for all of the shards`
     batch_input=$(find in/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
-        | sed 's/^/--input \/data\/basecounts\//g')
+        | sort | sed 's/^/--input \/data\/basecounts\//g')
 
     # Load the GATK docker image
     docker load -i /home/dnanexus/in/GATK_docker/GATK*.tar.gz
@@ -613,7 +632,7 @@ _sub_job_download_inputs() {
     interval_list=$( basename $( find /home/dnanexus/in/ -name '*.interval_list' ))
     annotated_intervals=$( basename $( find /home/dnanexus/in/ -name 'annotated_intervals.tsv' ))
 
-    # set +x # suppress this going to the logs as its long  # TODO - uncomment
+    set +x # suppress this going to the logs as its long  # TODO - uncomment
 
     # Get basecount and ploidy files uploaded into container by parent job
     basecount_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/basecounts")
@@ -626,7 +645,7 @@ _sub_job_download_inputs() {
 
     cmds=$(for f in $basecount_files $ploidy_files; do \
         id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
-        echo "'mkdir -p in/$dir && dx download --no-progress $id -o in/$path'"; done)
+        echo "'mkdir -p in/$dir && dx download --no-progress $DX_WORKSPACE_ID:$id -o in/$path'"; done)
 
     echo $cmds | xargs -n1 -P $DOWNLOAD_PROCESSES bash -c
     set -x
@@ -641,26 +660,29 @@ _sub_job_upload_outputs() {
     : '''
     Util function for _sub_job().
 
-    Uploads required output back to container to be downloaded back to parent job for post processing
+    Uploads required output back to container to be downloaded back to parent job for post processing.
+    Since this is >1000 files for each sub job we will create a single tar to upload to reduce the
+    amount of API queries, this will then be downloaded and unpacked in the parent job
     '''
     mark-section "Uploading sub job output"
 
-    mkdir -p out/gCNV
-    mv /home/dnanexus/in/gCNV/$name-calls out/gCNV/
-    mv /home/dnanexus/in/gCNV/$name-model out/gCNV/
+    mkdir -p gCNV
+    mv /home/dnanexus/in/gCNV/$name-calls gCNV/
+    mv /home/dnanexus/in/gCNV/$name-model gCNV/
 
-    total_files=$(find out/ -type f | wc -l)
-    total_size=$(du -sh out/ | cut -f 1)
-
-    # strictly limit upload processes to not hit limits across multiple sub jobs
-    UPLOAD_PROCESSES=$(nproc --all)
-    if (( DOWNLOAD_PROCESSES > 8 )); then UPLOAD_PROCESSES=$(bc <<< "${UPLOAD_PROCESSES} / 2"); fi
+    total_files=$(find gCNV/ -type f | wc -l)
+    total_size=$(du -sh gCNV/ | cut -f 1)
 
     SECONDS=0
-    echo "Uploading sample output"
-    find /home/dnanexus/out/ -type f | xargs -P $UPLOAD_PROCESSES -n1 -I{} bash -c \
-        "_upload_single_file {} _ false"
+    echo "Creating tar from ${total_files} output files (${total_size}) to upload to parent job"
+
+    name=$(jq -r '.name' dnanexus-job.json )
+    time tar -cf "${name}.tar" gCNV/
+
+    # find /home/dnanexus/out/ -type f | xargs -P $UPLOAD_PROCESSES -n1 -I{} bash -c \
+    #     "_upload_single_file {} _ false"
+    time dx upload "${name}.tar" --parents --brief --path gCNV/
 
     duration=$SECONDS
-    echo "Uploaded ${total_files} files (${total_size}) in $(($duration / 60))m$(($duration % 60))s"
+    echo "Created and uploaded ${name}.tar in $(($duration / 60))m$(($duration % 60))s"
 }
