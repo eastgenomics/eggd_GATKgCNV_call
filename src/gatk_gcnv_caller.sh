@@ -201,7 +201,7 @@ _call_GATK_FilterIntervals() {
         | sort | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
-    /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
+    docker run -v /home/dnanexus/inputs:/data \
         "$GATK_image" gatk FilterIntervals \
         -L /data/beds/preprocessed.interval_list \
         -imr OVERLAPPING_ONLY \
@@ -253,7 +253,7 @@ _call_GATK_DetermineGermlineContigPloidy() {
         | sort | sed 's/^/--input \/data\/basecounts\//g')
 
     SECONDS=0
-    /usr/bin/time -v docker run \
+    docker run \
         -v /home/dnanexus/inputs:/data \
         "$GATK_image" gatk DetermineGermlineContigPloidy \
         -L /data/beds/filtered.interval_list \
@@ -289,7 +289,7 @@ _call_GATK_GermlineCNVCaller() {
     if [ "$scatter_by_interval_count" == 'true' -a "$scatter_count" -lt "$total_intervals" ]; then
         mark-section "Scattering intervals into sublists of approximately $scatter_count"
 
-        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
+        docker run -v /home/dnanexus/inputs:/data \
             "$GATK_image" gatk IntervalListTools \
             --INPUT /data/beds/filtered.interval_list \
             --SUBDIVISION_MODE INTERVAL_COUNT \
@@ -301,8 +301,6 @@ _call_GATK_GermlineCNVCaller() {
         _launch_sub_jobs
     elif [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
-        local chromosomes
-        local ints
 
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
         ints=/home/dnanexus/inputs/beds/filtered.interval_list
@@ -331,11 +329,12 @@ _call_GATK_GermlineCNVCaller() {
     else
         # Set off cnv_calling together in the parent job
         echo "Running GermlineCNVCaller in parent job without scattering"
+
         local batch_input
         batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
             | sort | sed 's/^/--input \/data\/basecounts\//g')
 
-        /usr/bin/time -v docker run -v /home/dnanexus/inputs:/data \
+        docker run -v /home/dnanexus/inputs:/data \
             "$GATK_image" gatk GermlineCNVCaller \
             -L /data/beds/filtered.interval_list \
             -imr OVERLAPPING_ONLY \
@@ -374,26 +373,11 @@ _call_GATKPostProcessGermlineCNVCalls() {
     batch_input_postprocess+=$(sed 's/^/ --calls-shard-path \/data\/gCNV\//g; s/$/-calls/g' <<< $models)
     batch_input_postprocess=$(sed -z "s/\n/ /g" <<< "$batch_input_postprocess")
 
-    # batch_input_postprocess=""
-    # for shard_dir in inputs/gCNV/*-model; do
-    #     prefix=$( basename $shard_dir | cut -d '-' -f1 )
-    #     batch_input_postprocess+="--calls-shard-path /data/gCNV/$prefix-calls "
-    #     batch_input_postprocess+="--model-shard-path /data/gCNV/$prefix-model "
-    # done
-
-    # TODO - maybe remove this if it doesn't change behaviour
-    # if [[ -n "$batch_input_postprocess" ]];then
-    #     export $batch_input_postprocess
-    # fi
-
     # command finds sample data based on an arbitrary index which needs to be passed to parallel
     # index is created based on the number of input bams
     # triple colon at the end is the parallel way to provide an array of integers
-    # local index
-    # index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
-
-    sample_num=$(ls inputs/bams/*.bam | wc -l)
-    index=$(expr $sample_num - 1)
+    local index
+    index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
 
     # export if set to be available to sub shells in parallel
     if [[ -n "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
@@ -441,11 +425,13 @@ _call_generate_gcnv_bed() {
     local denoised_copy_ratio_files
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
 
+    SECONDS=0
     python3 generate_gcnv_bed.py \
         --copy_ratios "$denoised_copy_ratio_files" \
         -s --run "$run_name"
 
-    echo "Completed generating gCNV copy ratio visualisation files"
+    duration=$SECONDS
+    echo "Completed generating gCNV copy ratio visualisation files in $(($duration / 60))m$(($duration % 60))s"
 }
 
 _launch_sub_jobs() {
@@ -464,13 +450,15 @@ _launch_sub_jobs() {
 
     SECONDS=0
     echo "Uploading ploidy and basecounts for sub jobs"
+
+    total_files=$(find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f | wc-l)
     find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f \
         | xargs -P $PROCESSES -n1 -I{} bash -c "_upload_single_file {} _ false"
 
     duration=$SECONDS
-    echo "Uploaded ploidy and base count files in $(($duration / 60))m$(($duration % 60))s"
+    echo "Uploaded ${total_files} ploidy and base count files in $(($duration / 60))m$(($duration % 60))s"
 
-    for interval in $( find /home/dnanexus/inputs/scatter-dir -type f -name "scattered.interval_list" ); do
+    for interval in $(find /home/dnanexus/inputs/scatter-dir -type f -name "scattered.interval_list"); do
         job_name=$(grep -Po 'chr[0-9XY]+' <<< "$interval")
         interval_file=$(dx upload --brief "$interval")
 
@@ -517,35 +505,10 @@ _get_sub_job_output() {
     sleep 30
 
     SECONDS=0
-    # suppress this going to the logs as its long
-    # set +x # TODO - uncomment
-
-    # files from sub jobs will be in the container- project context of the
-    # current job ($DX_WORKSPACE-id) => search here for all the files
-    # gCNV_files=$(dx find data --json --verbose --path "$DX_WORKSPACE_ID:/gCNV")
-
-    # turn describe output into id:/path/to/file to download with dir structure
-    # files=$(jq -r '.[] | .id + ":" + .describe.folder + "/" + .describe.name' <<< $gCNV_files)
-
-    # build aggregated directory structure and download all files
-    # cmds=$(for f in $files; do \
-    #     id=${f%:*}; path=${f##*:}; dir=$(dirname "$path"); \
-    #     echo "'mkdir -p inputs/$dir && dx download --no-progress $DX_WORKSPACE_ID:$id -o inputs/$path'"; done)
-
-    # echo $cmds | xargs -n1 -P${DOWNLOAD_PROCESSES} bash -c
-
-    # echo $sub_job_tars | xargs -n1 -P $DOWNLOAD_PROCESSES dx download --no-progress --output tars/
-    # find tars/ -type f -name "*tar" | xargs -n1 -P4 -I{} sudo tar xf {} -C inputs/
-
     mkdir tars
 
     sub_job_tars=$(dx find data --json --path "$DX_WORKSPACE_ID:/gCNV" | jq -r '.[].id')
     echo "$sub_job_tars" | xargs -P $DOWNLOAD_PROCESSES -n1 -I{} sh -c "dx cat $DX_WORKSPACE_ID:{} | tar xf - -C inputs"
-
-    sleep 10
-    ls
-    sleep 10
-    find inputs/ -type d
 
     total=$(du -sh /home/dnanexus/inputs/gCNV/ | cut -f1)
     duration=$SECONDS
@@ -596,7 +559,7 @@ _sub_job() {
     mark-section "Running GATK GermlineCNVCaller"
 
     SECONDS=0
-    /usr/bin/time -v docker run -v /home/dnanexus/in/:/data/ \
+    docker run -v /home/dnanexus/in/:/data/ \
         "$GATK_image" gatk GermlineCNVCaller \
         -L /data/interval_list/$interval_list \
         -imr OVERLAPPING_ONLY \
