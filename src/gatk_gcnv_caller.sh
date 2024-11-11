@@ -44,6 +44,7 @@ main() {
     _call_GATK_DetermineGermlineContigPloidy
     _call_GATK_GermlineCNVCaller
     _call_GATKPostProcessGermlineCNVCalls
+    _rename_output_vcfs
 
     _call_generate_gcnv_bed
     _format_output_files_for_upload
@@ -407,6 +408,20 @@ _call_GATKPostProcessGermlineCNVCalls() {
 
     duration=$SECONDS
     echo "PostprocessGermlineCNVCalls completed in $(($duration / 60))m$(($duration % 60))s"
+}
+
+_rename_output_vcfs() {
+    : '''
+    Rename the output VCFs from GATK PostProcessGermlineCNVCalls from sample index number to the
+    sample name stored in the VCF header
+    '''
+    find inputs/vcfs/ -name "*_segments.vcf" | parallel -I{} --max-args 1 --jobs $PROCESSES ' \
+        sample_file=$( basename {} ); file_name="${sample_file%_segments.vcf}"; \
+        sample_name=$(bcftools view {} -h | tail -n 1 | cut -f 10 ); \
+        mv inputs/vcfs/$file_name"_denoised_copy_ratios.tsv" inputs/vcfs/$sample_name"_denoised_copy_ratios.tsv"; \
+        mv inputs/vcfs/$file_name"_segments.vcf" inputs/vcfs/$sample_name"_segments.vcf"; \
+        mv inputs/vcfs/$file_name"_intervals.vcf" inputs/vcfs/$sample_name"_intervals.vcf" \
+    '
 }
 
 _call_generate_gcnv_bed() {
