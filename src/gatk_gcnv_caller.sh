@@ -14,6 +14,7 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 # control how many operations to open in parallel, for download / upload set one per CPU core
 # limited to 32 to not (hopefully) hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
+PROCESSES=$(bc <<< "$(nproc --all) / 4")
 DOWNLOAD_PROCESSES=$(nproc --all)
 if (( DOWNLOAD_PROCESSES > 32 )); then DOWNLOAD_PROCESSES=32; fi
 
@@ -451,7 +452,7 @@ _launch_sub_jobs() {
     SECONDS=0
     echo "Uploading ploidy and basecounts for sub jobs"
 
-    total_files=$(find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f | wc-l)
+    total_files=$(find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f | wc -l)
     find /home/dnanexus/inputs/ploidy_dir /home/dnanexus/inputs/basecounts -type f \
         | xargs -P $PROCESSES -n1 -I{} bash -c "_upload_single_file {} _ false"
 
