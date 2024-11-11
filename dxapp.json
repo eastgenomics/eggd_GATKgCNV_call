@@ -148,6 +148,30 @@
         "optional": true,
         "patterns": ["*.tsv"],
         "help": "Probability of the copy number of the chromosomes"
+        },
+        {
+            "name": "max_sub_job_instance",
+            "label": "max sub job instance type",
+            "class": "string",
+            "optional": true,
+            "default": "mem1_ssd1_v2_x36",
+            "help": "instance size to use for sub jobs where interval count >15,000"
+        },
+        {
+            "name": "mid_sub_job_instance",
+            "label": "mid sub job instance type",
+            "class": "string",
+            "optional": true,
+            "default": "mem1_ssd1_v2_x16",
+            "help": "instance size to use for sub jobs where interval count <15,000 but >10,000"
+        },
+        {
+            "name": "min_sub_job_instance",
+            "label": "min sub job instance type",
+            "class": "string",
+            "optional": true,
+            "default": "mem1_ssd2_v2_x8",
+            "help": "instance size to use for sub jobs where interval count <10,000"
         }
     ],
     "outputSpec": [

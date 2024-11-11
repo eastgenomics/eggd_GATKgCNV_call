@@ -438,14 +438,14 @@ _launch_sub_jobs() {
         job_name=$(grep -Po 'chr[0-9XY]+' <<< "$interval")
         interval_file=$(dx upload --brief $interval)
 
-        # Bump instance type up for large interval lists
+        # Bump instance type up for large interval lists, set from dxapp.json
         interval_num=$(grep -v "^@" $interval | wc -l)
         if [ $interval_num -gt 15000 ]; then
-            instance="mem1_ssd1_v2_x36"
+            instance="$max_sub_job_instance"
         elif [ $interval_num -gt 10000 ]; then
-            instance="mem1_ssd1_v2_x16"
+            instance="$mid_sub_job_instance"
         else
-            instance="mem1_ssd1_v2_x8"
+            instance="$min_sub_job_instance"
         fi
 
         dx-jobutil-new-job _sub_job \
@@ -462,6 +462,7 @@ _launch_sub_jobs() {
     SECONDS=0
     echo "$(wc -l job_ids) jobs launched, holding job until all to complete..."
     dx wait --from-file job_ids
+    exit 0
 
     duration=$SECONDS
     echo "All subjobs for GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
@@ -513,6 +514,7 @@ _sub_job() {
     in the container, so are downloaded separately.
     '''
     mark-section "Starting sub job to run GATK GermlineCNVCaller"
+    exit 0
 
     # prefixes all lines of commands written to stdout with datetime
     PS4='\000[$(date)]\011'
