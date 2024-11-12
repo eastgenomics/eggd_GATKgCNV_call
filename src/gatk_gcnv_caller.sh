@@ -335,6 +335,7 @@ _call_GATK_GermlineCNVCaller() {
         batch_input=$(find inputs/basecounts/ -type f -name '*_basecount.hdf5' -exec basename {} \; \
             | sort | sed 's/^/--input \/data\/basecounts\//g')
 
+        SECONDS=0
         docker run -v /home/dnanexus/inputs:/data \
             "$GATK_image" gatk GermlineCNVCaller \
             -L /data/beds/filtered.interval_list \
@@ -347,6 +348,9 @@ _call_GATK_GermlineCNVCaller() {
             --output-prefix CNV \
             -O /data/gCNV \
             --verbosity WARNING
+
+        duration=$SECONDS
+        echo "GermlineCNVCaller completed in $(($duration / 60))m$(($duration % 60))s"
     fi
 }
 
