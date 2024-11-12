@@ -12,10 +12,10 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 /usr/bin/dx-dstat 10
 
 # control how many operations to open in parallel, for download / upload set one per CPU core
-# limited to 32 to not (hopefully) hit rate limits for API queries on large instances
+# limited to 16 to not (hopefully) hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
 IO_PROCESSES=$(nproc --all)
-if (( IO_PROCESSES > 32 )); then IO_PROCESSES=32; fi
+if (( IO_PROCESSES > 16 )); then IO_PROCESSES=32; fi
 
 
 main() {
