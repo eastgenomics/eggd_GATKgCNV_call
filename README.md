@@ -36,11 +36,12 @@ Parameters to calculate coverage, filter out low quality intervals and call vari
 **How to run this app**:
 
 ```bash
-dx run app-eggd_GATKgCNV_call/1.0.0 \
+dx run app-eggd_GATKgCNV_call/ \
   -iGATK_docker="<GATK_docker.tar.gz>" \
   -iinterval_list="<output from prep app>" \
   -iannotation_tsv="<output from prep app>" \
-  -ibambais="<array of paired sample bam and index file IDs>"
+  -ibambais="<array of paired sample bam and index file IDs>" \
+  -irun_name="<name of run>"
 ```
 
 ## Dependencies
