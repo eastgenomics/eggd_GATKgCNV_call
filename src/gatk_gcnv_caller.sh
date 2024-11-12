@@ -14,7 +14,6 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 # control how many operations to open in parallel, for download / upload set one per CPU core
 # limited to 32 to not (hopefully) hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
-PROCESSES=$(bc <<< "$(nproc --all) / 4")
 DOWNLOAD_PROCESSES=$(nproc --all)
 if (( DOWNLOAD_PROCESSES > 32 )); then DOWNLOAD_PROCESSES=32; fi
 
@@ -53,6 +52,24 @@ main() {
     if [ "$debug_fail_end" == 'true' ]; then echo "exiting due to -idebug_fail_end=true"; exit 1; fi
 
     _upload_final_output
+
+    _get_peak_usage
+}
+
+_get_peak_usage() {
+    : '''
+    Reports the peak memory and storage usage from dstat, to be called at end of app
+    '''
+    dx watch $DX_JOB_ID --no-follow --quiet > job.log
+
+    peak_mem=$(grep 'INFO CPU' job.log | cut -d':' -f5 | cut -d'/' -f1 | sort -n | tail -n1)
+    total_mem="$(($(grep MemTotal /proc/meminfo | grep --only-matching '[0-9]*')/1024))"
+
+    peak_storage=$(grep 'INFO CPU' job.log | cut -d':' -f6 | cut -d'/' -f1 | sort -n | tail -n1)
+    total_storage=$(df -Pk / | awk 'NR == 2' | awk '{printf("%.0f", $2/1024/1024)}')
+
+    echo "Memory usage peaked at ${peak_mem}/${total_mem}MB"
+    echo "Storage usage peaked at ${peak_storage}/${total_storage}GB"
 }
 
 _download_parent_job_inputs() {
@@ -383,8 +400,12 @@ _call_GATKPostProcessGermlineCNVCalls() {
     # export if set to be available to sub shells in parallel
     if [[ -n "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
 
+    # set the number of parallel jobs for post processing to be lower as it is significantly
+    # faster allowing it use more than a single core for each sample
+    POSTPROCESS_PROCESSES=$(( $(nproc --all) / 4 ))
+
     SECONDS=0
-    parallel --jobs $PROCESSES 'docker run -v /home/dnanexus/inputs:/data $GATK_image \
+    parallel --jobs $POSTPROCESS_PROCESSES 'docker run -v /home/dnanexus/inputs:/data $GATK_image \
         gatk PostprocessGermlineCNVCalls \
         --sample-index {} \
         '"$PostprocessGermlineCNVCalls_args"' \
