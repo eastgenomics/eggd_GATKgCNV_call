@@ -23,7 +23,7 @@ This app requires:
 Parameters to calculate coverage, filter out low quality intervals and call variants:
 * low read depth threshold - discard intervals with low coverage across the majority of samples
 * low percentage threshold - if interval is covered below threshold in samples above this percentage then filter out that interval
-* minimum and maxinmum GC content of interval
+* minimum and maximum GC content of interval
 * minimum and maximum mappability of interval - depending if annotation.tsv has this information 
 * (minimum and maximum segmental duplication of interval) - depending on whether annotation.tsv has this information
 
