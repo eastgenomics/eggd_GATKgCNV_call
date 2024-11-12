@@ -1,5 +1,5 @@
 {
-    "name": "eggd_GATKgCNV_call_refactor",
+    "name": "eggd_GATKgCNV_call",
     "title": "eggd_GATKgCNV_call",
     "summary": "GATK gCNV germline CNV caller",
     "dxapi": "1.0.0",
