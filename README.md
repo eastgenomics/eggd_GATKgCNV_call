@@ -14,12 +14,28 @@ This app may be executed as standalone or as part of an analysis pipeline.
 Input files (preprocessed and annotated target intervals) come from the GATKgCNV_prep app and input bam and bai files come from the Sentieon app of the NGS data processing workflow (eg Dias single).
 
 ## What data are required for this app to run?
-This app requires:
-* at least 30 pairs of sample.bam and sample.bai files from the same sequencing run (-ibambis array of files)
-* preprocessed.interval_list specifying the intervals where CNVs should be called (-iinterval_list)
-* a corresponding annotation.tsv that has GC content and optionally other information about each of the target intervals (-iannotation_tsv)
-* OPTIONAL to provide a prior probability.tsv for CNV calling (app has a built-in default)
-* name of run as a string for naming output (provided to `-irun_name`)
+**Required**
+* `-iGATK_docker` (`file`) - Docker image of GATK
+* `-ibambais` (`array:file`) - pairs of bam / bai files for each sample (minimum: 30 samples)
+* `-iinterval_list` (`file`) - preprocessed.interval_list specifying the intervals where CNVs should be called
+* `-iannotation_tsv` (`file`) - corresponding annotation.tsv that has GC content and optionally other information about each of the target intervals
+* `-irun_name` (`str`) - name of run, used for naming run level output files
+
+
+**Optional**
+* `-iprior_prob` (`file`): prior probabilities for the copy number of the chromosomes, default bundled with app in [resources](https://github.com/eastgenomics/eggd_GATKgCNV_call/blob/main/resources/home/dnanexus/prior_prob.tsv)
+* `-iscatter_by_chromosome` (`bool`): controls if to split CNV calling across sub jobs by chromosome (i.e for larger captures)
+* `-imax_sub_job_instance` (`str`): instance size to use for sub jobs where interval count >15,000 (default: `mem1_ssd1_v2_x36`)
+* `-imid_sub_job_instance` (`str`): instance size to use for sub jobs where interval count <15,000 and >10,000 (default: `mem1_ssd1_v2_x16`)
+* `-imin_sub_job_instance` (`str`): instance size to use for sub jobs where interval count <10,000 (default: `mem1_ssd2_v2_x8`)
+* `-iCollectReadCounts_args` (`str`): optional command line arguments for CollectReadCounts
+* `-iFilterIntervals_args` (`str`): optional command line arguments for FilterIntervals
+* `-iDetermineGermlineContigPloidy_args` (`str`): optional command line arguments for DetermineGermlineContigPloidy
+* `-iGermlineCNVCaller_args` (`str`): optional command line arguments for GermlineCNVCaller
+* `-iPostprocessGermlineCNVCalls_args` (`str`): optional command line arguments for PostprocessGermlineCNVCalls
+* `-idebug_fail_start` (`bool`): automatically fail the job after inputs have been downloaded
+* `-idebug_fail_end` (`bool`): automatically fail the job after all commands have finished
+
 
 Parameters to calculate coverage, filter out low quality intervals and call variants:
 * low read depth threshold - discard intervals with low coverage across the majority of samples
