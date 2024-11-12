@@ -588,10 +588,6 @@ _sub_job_download_inputs() {
     '''
     mark-section "Downloading files to sub job"
 
-    # set no. of parallel processes to open fow downloading, hard limit at 32 if > 32 cores
-    IO_PROCESSES=$(nproc --all)
-    if (( IO_PROCESSES > 32 )); then IO_PROCESSES=32; fi
-
     SECONDS=0
     dx-download-all-inputs --parallel
 
