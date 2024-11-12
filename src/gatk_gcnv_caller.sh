@@ -301,23 +301,7 @@ _call_GATK_GermlineCNVCaller() {
     mark-section "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mkdir inputs/gCNV
 
-    local total_intervals
-    total_intervals=$(grep -v ^@ /home/dnanexus/inputs/beds/filtered.interval_list | wc -l)
-
-    if [ "$scatter_by_interval_count" == 'true' -a "$scatter_count" -lt "$total_intervals" ]; then
-        mark-section "Scattering intervals into sublists of approximately $scatter_count"
-
-        docker run -v /home/dnanexus/inputs:/data \
-            "$GATK_image" gatk IntervalListTools \
-            --INPUT /data/beds/filtered.interval_list \
-            --SUBDIVISION_MODE INTERVAL_COUNT \
-            --SCATTER_CONTENT "$scatter_count" \
-            --OUTPUT /data/scatter-dir \
-            --VERBOSITY WARNING
-
-        # Set off subjobs, will be held here until all complete
-        _launch_sub_jobs
-    elif [ "$scatter_by_chromosome" == "true" ]; then
+    if [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
 
         chromosomes=( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 X Y )
