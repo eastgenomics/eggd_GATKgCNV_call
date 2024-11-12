@@ -19,6 +19,7 @@ This app requires:
 * preprocessed.interval_list specifying the intervals where CNVs should be called (-iinterval_list)
 * a corresponding annotation.tsv that has GC content and optionally other information about each of the target intervals (-iannotation_tsv)
 * OPTIONAL to provide a prior probability.tsv for CNV calling (app has a built-in default)
+* name of run as a string for naming output (provided to `-irun_name`)
 
 Parameters to calculate coverage, filter out low quality intervals and call variants:
 * low read depth threshold - discard intervals with low coverage across the majority of samples
