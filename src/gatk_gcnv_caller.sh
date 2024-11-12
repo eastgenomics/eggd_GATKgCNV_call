@@ -625,7 +625,8 @@ _sub_job_upload_outputs() {
 
     Uploads required output back to container to be downloaded back to parent job for post processing.
     Since this is >1000 files for each sub job we will create a single tar to upload to reduce the
-    amount of API queries, this will then be downloaded and unpacked in the parent job
+    amount of API queries and avoid rate liomits, this will then be downloaded and unpacked in the
+    parent job
     '''
     mark-section "Uploading sub job output"
 
