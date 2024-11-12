@@ -292,8 +292,7 @@ _call_GATK_GermlineCNVCaller() {
     Calls GATK GermlineCNVCaller to call the actual CNVs.
 
     This may run entirely in the parent job, or may be split to sub jobs by chromosome
-    or by interval, dependent on if -iscatter_by_interval_count or -iscatter_by_chromosome
-    are specified, respectively.
+    dependent on if -iscatter_by_chromosome specified.
 
     If splitting to sub jobs, _set_off_sub_jobs is called, which holds the parent job until
     all sub jobs have completed.
