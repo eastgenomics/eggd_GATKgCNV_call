@@ -294,7 +294,7 @@ _call_GATK_GermlineCNVCaller() {
     This may run entirely in the parent job, or may be split to sub jobs by chromosome
     dependent on if -iscatter_by_chromosome specified.
 
-    If splitting to sub jobs, _set_off_sub_jobs is called, which holds the parent job until
+    If splitting to sub jobs, _launch_sub_jobs is called, which holds the parent job until
     all sub jobs have completed.
     '''
     mark-section "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
