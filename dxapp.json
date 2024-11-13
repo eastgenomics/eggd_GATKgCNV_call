@@ -156,6 +156,14 @@
             "optional": true,
             "default": "mem1_ssd2_v2_x8",
             "help": "instance size to use for sub jobs where interval count <10,000"
+        },
+        {
+            "name": "post_process_proc_per_sample",
+            "label": "post process cores per sample",
+            "class": "int",
+            "optional": true,
+            "default": 1,
+            "help": "number of CPU cores to allow per sample for PostProcessGermlineCNVCalls"
         }
     ],
     "outputSpec": [

@@ -24,6 +24,7 @@ Input files (preprocessed and annotated target intervals) come from the GATKgCNV
 
 **Optional**
 * `-iprior_prob` (`file`): prior probabilities for the copy number of the chromosomes, default bundled with app in [resources](https://github.com/eastgenomics/eggd_GATKgCNV_call/blob/main/resources/home/dnanexus/prior_prob.tsv)
+* `-ipost_process_proc_per_sample` (`int`): number of CPU cores to allow per sample for PostProcessGermlineCNVCalls step. For larger captures it appears more efficient to allow more CPU cores per sample and process fewer in parallel (i.e setting this input to 2-4)
 * `-iscatter_by_chromosome` (`bool`): controls if to split CNV calling across sub jobs by chromosome (i.e for larger captures)
 * `-imax_sub_job_instance` (`str`): instance size to use for sub jobs where interval count >15,000 (default: `mem1_ssd1_v2_x36`)
 * `-imid_sub_job_instance` (`str`): instance size to use for sub jobs where interval count <15,000 and >10,000 (default: `mem1_ssd1_v2_x16`)

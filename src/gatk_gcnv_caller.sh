@@ -12,10 +12,10 @@ kill $(ps aux | grep pcp-dstat | head -n1 | awk '{print $2}')
 /usr/bin/dx-dstat 10
 
 # control how many operations to open in parallel, for download / upload set one per CPU core
-# limited to 16 to not (hopefully) hit rate limits for API queries on large instances
+# limited to 32 to not (hopefully) hit rate limits for API queries on large instances
 PROCESSES=$(nproc --all)
 IO_PROCESSES=$(nproc --all)
-if (( IO_PROCESSES > 16 )); then IO_PROCESSES=32; fi
+if (( IO_PROCESSES > 32 )); then IO_PROCESSES=32; fi
 
 
 main() {
@@ -387,9 +387,11 @@ _call_GATKPostProcessGermlineCNVCalls() {
     # export if set to be available to sub shells in parallel
     if [[ -n "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
 
-    # set the number of parallel jobs for post processing to be lower as it is significantly
-    # faster allowing it use more than a single core for each sample
-    POSTPROCESS_PROCESSES=$(( $(nproc --all) / 4 ))
+    # set the number of parallel jobs for post processing as the total available / what is provided
+    # to post_process_proc_per_sample arg, for smaller captures it is faster for this to be 1:1
+    # samples to cores, but for larger captures it seems more efficient to process less in parallel
+    # and allow it use more than a single core for each sample
+    POSTPROCESS_PROCESSES=$(( $(nproc --all) / ${post_process_proc_per_sample} ))
 
     SECONDS=0
     parallel --jobs $POSTPROCESS_PROCESSES 'docker run -v /home/dnanexus/inputs:/data $GATK_image \
