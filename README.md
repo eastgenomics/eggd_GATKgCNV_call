@@ -72,11 +72,13 @@ dx run app-eggd_GATKgCNV_call/ \
 > `$ dx api system findDataObjects '{"scope":{"project": "<project>","folder":"<folder>"}, "name": {"regexp": ".*bam$|.*bai$"}, "limit": 1000}' | jq -r '.results[].id' | sed 's/^/-ibambais=/g'`
 >
 > where `<project>` and `<folder>` are the project and path to the bam files, respectively.
+>
 > This will generate the following:
 >```-ibambais=file-GPg03x84f1q7F1KZJvy9zVgY
 > -ibambais=file-GPg054Q4YYz7Y4fzYYGYKz31
 > -ibambais=file-GPg000Q4fFQx748FQ8jZbbBB
-> -ibambais=file-GPfzzK049JXy1JKpGvJ5vJ7Q```
+> -ibambais=file-GPfzzK049JXy1JKpGvJ5vJ7Q
+> ...
 
 
 ## Dependencies
