@@ -62,9 +62,15 @@ dx run app-eggd_GATKgCNV_call/ \
   -iGATK_docker="<GATK_docker.tar.gz>" \
   -iinterval_list="<output from prep app>" \
   -iannotation_tsv="<output from prep app>" \
-  -ibambais="<array of paired sample bam and index file IDs>" \
-  -irun_name="<name of run>"
+  -irun_name="<name of run>" \
+  -ibambais="<array of paired sample bam and index file IDs, specified once per file>"
 ```
+
+> [!TIP]
+> The array input for bam/bai files provided to `-ibambais` may be generated with the following:
+> `$ dx api system findDataObjects '{"scope":{"project": "<project>","folder":"<folder>"}, "name": {"regexp": ".*bam$|.*bai$"}, "limit": 1000}' | jq -r '.results[].id' | sed 's/^/-ibambais=/g'`
+> where `<project>` and `<folder>` are the project and path to the bam files, respectively
+
 
 ## Dependencies
 The app requires a tar.gz of the Docker image for GATK 4.2+ as an input. Htslib and bedtools are bundled with the app as app assets.
