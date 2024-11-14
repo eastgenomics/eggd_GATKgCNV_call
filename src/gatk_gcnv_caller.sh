@@ -259,7 +259,7 @@ _call_GATK_IntervalListToBed() {
 
 _call_GATK_DetermineGermlineContigPloidy() {
     : '''
-    Call GATK DetermineGernlineContigPloidy to generate the ploidy model and calls for each sample
+    Call GATK DetermineGermlineContigPloidy to generate the ploidy model and calls for each sample
 
     This is the most CPU/memory intensive and longest step
     '''
