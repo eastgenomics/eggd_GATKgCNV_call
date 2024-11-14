@@ -506,7 +506,7 @@ _launch_sub_jobs() {
 
 _get_sub_job_output() {
     : '''
-    Get the output of GerminelineCNVCaller run in each subjob and download back to the parent job.
+    Get the output of GermlineCNVCaller run in each subjob and download back to the parent job.
 
     Should only be called once all sub jobs have completed from the parent job.
     '''
