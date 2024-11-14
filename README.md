@@ -68,7 +68,9 @@ dx run app-eggd_GATKgCNV_call/ \
 
 > [!TIP]
 > The array input for bam/bai files provided to `-ibambais` may be generated with the following:
+>
 > `$ dx api system findDataObjects '{"scope":{"project": "<project>","folder":"<folder>"}, "name": {"regexp": ".*bam$|.*bai$"}, "limit": 1000}' | jq -r '.results[].id' | sed 's/^/-ibambais=/g'`
+>
 > where `<project>` and `<folder>` are the project and path to the bam files, respectively
 
 
