@@ -1,135 +1,175 @@
 {
     "name": "eggd_GATKgCNV_call",
-    "title": "GATKgCNV_call",
+    "title": "eggd_GATKgCNV_call",
     "summary": "GATK gCNV germline CNV caller",
     "dxapi": "1.0.0",
-    "version": "1.0.2",
+    "version": "2.0.0",
     "inputSpec": [
         {
-        "name": "GATK_docker",
-        "label": "GATK docker image tar.gz",
-        "class": "file",
-        "optional": false,
-        "patterns": [ "*.tar", "*.tar.gz"],
-        "suggestions": [
-            {
-            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
-            "path": "/assets/GATK/"
-            }
-        ]
+            "name": "GATK_docker",
+            "label": "GATK docker image tar.gz",
+            "class": "file",
+            "optional": false,
+            "patterns": [ "*.tar", "*.tar.gz"],
+            "suggestions": [
+                {
+                    "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+                    "path": "/assets/GATK/"
+                }
+            ]
         },
         {
-        "name": "bambais",
-        "label": "Pairs of sample.bam AND sample.bai files",
-        "class": "array:file",
-        "optional": false,
-        "patterns": ["*.bam","*.bai"],
-        "help": "Sample.bam AND sample.bai indexed bam files"
+            "name": "bambais",
+            "label": "Pairs of sample.bam AND sample.bai files",
+            "class": "array:file",
+            "optional": false,
+            "patterns": ["*.bam","*.bai"],
+            "help": "Sample.bam AND sample.bai indexed bam files"
         },
         {
-        "name": "interval_list",
-        "label": "target interval list",
-        "class": "file",
-        "optional": false,
-        "patterns": ["*.interval_list"],
-        "suggestions": [
-            {
-            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
-            "path": "/assets/GATK/gCNV_inputs/"
-            }
-        ],
-        "help": "interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
+            "name": "interval_list",
+            "label": "Target interval list",
+            "class": "file",
+            "optional": false,
+            "patterns": ["*.interval_list"],
+            "suggestions": [
+                {
+                    "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+                    "path": "/assets/GATK/gCNV_inputs/"
+                }
+            ],
+            "help": "Interval list sorted in chromosome order, created in the 'GATKgCNV_prep' step"
         },
         {
-        "name": "annotation_tsv",
-        "label": "annotation for the intervals list",
-        "class": "file",
-        "optional": false,
-        "patterns": ["*.tsv"],
-        "suggestions": [
-            {
-            "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
-            "path": "/assets/GATK/gCNV_inputs/"
-            }
-        ],
-        "help": "contains GC content, mappability and other annotation of target intervals"
+            "name": "annotation_tsv",
+            "label": "Annotation for the intervals list",
+            "class": "file",
+            "optional": false,
+            "patterns": ["*.tsv"],
+            "suggestions": [
+                {
+                    "project": "project-Fkb6Gkj433GVVvj73J7x8KbV",
+                    "path": "/assets/GATK/gCNV_inputs/"
+                }
+            ],
+            "help": "Contains GC content, mappability and other annotation of target intervals"
         },
         {
-        "name": "run_name",
-        "label": "Name of the run",
-        "class": "string",
-        "optional": true,
-        "help": "prefix for gCNV.bed and summary files"
+            "name": "run_name",
+            "label": "Name of the run",
+            "class": "string",
+            "optional": false,
+            "help": "Prefix for gCNV.bed and summary files"
         },
         {
-        "name": "CollectReadCounts_args",
-        "label": "optional parameters for CollectReadCounts",
-        "class": "string",
-        "optional": true,
-        "default": "",
-        "help": "eg  '--format TSV', default is HDF5"
+            "name": "scatter_by_chromosome",
+            "label": "Split CNV calling into chromosome subjobs",
+            "class": "boolean",
+            "optional": true,
+            "default": false,
+            "help": "Boolean switch to enable CNV calling to be scattered by chromosome across subjobs in the case of large captures"
         },
         {
-        "name": "FilterIntervals_args",
-        "label": "optional parameters for FilterIntervals",
-        "class": "string",
-        "optional": true,
-        "default": " --minimum-gc-content 0.1 --maximum-gc-content 0.9 --minimum-mappability 0.9 --maximum-mappability 1.0 --low-count-filter-count-threshold 5 --low-count-filter-percentage-of-samples 90.0",
-        "help": "optional command line arguments for FilterIntervals"
+            "name": "CollectReadCounts_args",
+            "label": "Optional parameters for CollectReadCounts",
+            "class": "string",
+            "optional": true,
+            "default": "",
+            "help": "E.g.  '--format TSV', default is HDF5"
         },
         {
-        "name": "DetermineGermlineContigPloidy_args",
-        "label": "optional parameters for DetermineGermlineContigPloidy",
-        "class": "string",
-        "optional": true,
-        "default": "",
-        "help": "optional command line arguments for DetermineGermlineContigPloidy"
+            "name": "FilterIntervals_args",
+            "label": "Optional parameters for FilterIntervals",
+            "class": "string",
+            "optional": true,
+            "default": " --minimum-gc-content 0.1 --maximum-gc-content 0.9 --minimum-mappability 0.9 --maximum-mappability 1.0 --low-count-filter-count-threshold 5 --low-count-filter-percentage-of-samples 90.0",
+            "help": "Optional command line arguments for FilterIntervals"
         },
         {
-        "name": "GermlineCNVCaller_args",
-        "label": "optional parameters for GermlineCNVCaller",
-        "class": "string",
-        "optional": true,
-        "default": "",
-        "help": "optional command line arguments for GermlineCNVCaller"
+            "name": "DetermineGermlineContigPloidy_args",
+            "label": "Optional parameters for DetermineGermlineContigPloidy",
+            "class": "string",
+            "optional": true,
+            "default": "",
+            "help": "Optional command line arguments for DetermineGermlineContigPloidy"
         },
         {
-        "name": "PostprocessGermlineCNVCalls_args",
-        "label": "optional parameters for PostprocessGermlineCNVCalls",
-        "class": "string",
-        "optional": true,
-        "default": "",
-        "help": "optional command line arguments for PostprocessGermlineCNVCalls"
+            "name": "GermlineCNVCaller_args",
+            "label": "Optional parameters for GermlineCNVCaller",
+            "class": "string",
+            "optional": true,
+            "default": "",
+            "help": "Optional command line arguments for GermlineCNVCaller"
         },
         {
-        "name": "debug_fail_start",
-        "label": "Auto-fail the job at the start",
-        "class": "boolean",
-        "optional": true,
-        "default": false,
-        "help": "Automatically fail the job after inputs have been downloaded"
+            "name": "PostprocessGermlineCNVCalls_args",
+            "label": "Optional parameters for PostprocessGermlineCNVCalls",
+            "class": "string",
+            "optional": true,
+            "default": "",
+            "help": "Optional command line arguments for PostprocessGermlineCNVCalls"
         },
         {
-        "name": "debug_fail_end",
-        "label": "Auto-fail the job at the end",
-        "class": "boolean",
-        "optional": true,
-        "default": false,
-        "help": "Automatically fail the job after all commands have finished"
+            "name": "debug_fail_start",
+            "label": "Auto-fail the job at the start",
+            "class": "boolean",
+            "optional": true,
+            "default": false,
+            "help": "Automatically fail the job after inputs have been downloaded"
         },
         {
-        "name": "prior_prob",
-        "label": "prior probability of ploidy for contigs",
-        "class": "file",
-        "optional": true,
-        "patterns": ["*.tsv"],
-        "help": "Probability of the copy number of the chromosomes"
+            "name": "debug_fail_end",
+            "label": "Auto-fail the job at the end",
+            "class": "boolean",
+            "optional": true,
+            "default": false,
+            "help": "Automatically fail the job after all commands have finished"
+        },
+        {
+            "name": "prior_prob",
+            "label": "prior probability of ploidy for contigs",
+            "class": "file",
+            "optional": true,
+            "patterns": ["*.tsv"],
+            "help": "Probability of the copy number of the chromosomes"
+        },
+        {
+            "name": "max_sub_job_instance",
+            "label": "max sub job instance type",
+            "class": "string",
+            "optional": true,
+            "default": "mem1_ssd1_v2_x36",
+            "help": "instance size to use for sub jobs where interval count >15,000"
+        },
+        {
+            "name": "mid_sub_job_instance",
+            "label": "mid sub job instance type",
+            "class": "string",
+            "optional": true,
+            "default": "mem1_ssd1_v2_x16",
+            "help": "instance size to use for sub jobs where interval count <15,000 and >10,000"
+        },
+        {
+            "name": "min_sub_job_instance",
+            "label": "min sub job instance type",
+            "class": "string",
+            "optional": true,
+            "default": "mem1_ssd2_v2_x8",
+            "help": "instance size to use for sub jobs where interval count <10,000"
+        },
+        {
+            "name": "post_process_proc_per_sample",
+            "label": "post process cores per sample",
+            "class": "int",
+            "optional": true,
+            "default": 1,
+            "help": "number of CPU cores to allow per sample for PostProcessGermlineCNVCalls"
         }
     ],
     "outputSpec": [
         {
         "name": "result_files",
-        "label": "sample CNV vcfs, copy ratio files and run-level annotation and visualisation files",
+        "label": "Sample CNV vcfs, copy ratio files and run-level annotation and visualisation files",
         "class": "array:file"
         }
     ],
@@ -138,10 +178,11 @@
         "release": "20.04",
         "version": "0",
         "interpreter": "bash",
-        "file": "src/GATK_gCNVcaller.sh",
+        "file": "src/gatk_gcnv_caller.sh",
+        "headJobOnDemand": true,
         "timeoutPolicy": {
         "*": {
-            "hours": 3
+            "hours": 6
         }
         },
         "assetDepends": [
@@ -167,16 +208,13 @@
     ],
     "access": {
         "allProjects": "VIEW",
-        "project": "CONTRIBUTE",
-        "network": [
-        "*"
-        ]
+        "project": "CONTRIBUTE"
     },
     "regionalOptions": {
         "aws:eu-central-1": {
         "systemRequirements": {
             "*": {
-            "instanceType": "mem2_ssd1_v2_x8"
+            "instanceType": "mem3_ssd1_v2_x32"
             }
         }
         }
