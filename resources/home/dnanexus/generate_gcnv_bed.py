@@ -7,6 +7,8 @@ Requires bgzip and tabix to be installed and on path.
 import argparse
 from pathlib import Path
 import subprocess
+from timeit import default_timer as timer
+
 
 import pandas as pd
 
@@ -65,6 +67,9 @@ def generate_copy_ratio_df(args):
     - copy_ratio_df (df): df of all samples and intervals
     - samples (list): list of sample names, read from header in files
     """
+    start = timer()
+    print("\nReading in copy ratio tsv files")
+
     # get intervals from the first file to use for comparing all against
     copy_ratio_df = pd.read_csv(
         args.copy_ratios[0], sep="\t", comment="@", header=0
@@ -73,27 +78,17 @@ def generate_copy_ratio_df(args):
     copy_ratio_df.columns = ["chr", "start", "end"]
 
     # read all files in and add to copy_ratio_df
-    for file in args.copy_ratios:
-        with open(file, "r") as fh:
-            # add sample name from first line as separate col name to
-            # identify rows
-            lines = fh.readlines()
-            lines = [x for x in lines if x.startswith("@RG")]
-            sample_name = lines[0].split("SM:")[1].replace("\n", "")
+    for copy_ratio_file in args.copy_ratios:
+        with open(copy_ratio_file, "r") as fh:
+            # read through file until last line of header with sample name
+            while True:
+                line = fh.readline()
+                if line.startswith("@RG"):
+                    sample_name = line.split("SM:")[1].strip()
+                    break
 
-            # check we haven't read in twice
-            try:
-                assert sample_name not in copy_ratio_df.columns, (
-                    f"Sample {sample_name} already in sample list!"
-                    f"Current sample list: {copy_ratio_df.columns}"
-                )
-            except:
-                print("Sample is already loaded, skipping it")
-                continue
-
-        # read copy ratio to df
         file_df = pd.read_csv(
-            file,
+            copy_ratio_file,
             sep="\t",
             comment="@",
             header=0,
@@ -115,6 +110,13 @@ def generate_copy_ratio_df(args):
     # to create a 0-based BED file for IGV visualisation
     copy_ratio_df["start"] = copy_ratio_df["start"].apply(lambda x: x - 1)
 
+    end = timer()
+
+    print(
+        f"Completed reading {len(args.copy_ratios)} copy ratio files in"
+        f" {round(end - start, 2)}s"
+    )
+
     return copy_ratio_df
 
 
@@ -132,6 +134,9 @@ def generate_per_sample_copy_ratio_dfs(copy_ratio_df, keep_all_samples):
         - pd.DataFrame|list: either single DataFrame if keep_all_samples
             is True, or list of tuples, with (name, df) per sample
     """
+    start = timer()
+    print("\nCalculating mean values")
+
     samples = copy_ratio_df.columns.tolist()[3:]
 
     # calculate mean and std dev across all samples (rows)
@@ -155,6 +160,8 @@ def generate_per_sample_copy_ratio_dfs(copy_ratio_df, keep_all_samples):
 
     if keep_all_samples:
         copy_ratio_df = pd.concat([copy_ratio_df, mean_std_df], axis="columns")
+
+        print(f"Completed generating means in {round(timer() - start, 2)}s")
         return copy_ratio_df
     else:
         per_sample_dfs = []
@@ -171,6 +178,8 @@ def generate_per_sample_copy_ratio_dfs(copy_ratio_df, keep_all_samples):
 
             per_sample_dfs.append((sample, sample_df))
 
+        print(f"Completed generating means in {round(timer() - start, 2)}s")
+
         return per_sample_dfs
 
 
@@ -186,7 +195,7 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
         - per_sample (bool): controls writing bed file header, if per sample the
             mean tracks are added, else if per run clickToHighlight is enabled
     """
-    outfile = "{}_copy_ratios.gcnv.bed".format(prefix)
+    outfile = f"{prefix}_copy_ratios.gcnv.bed"
 
     with open(outfile, "w") as fh:
         # this line is needed at the beginning to tell igv.js that it is
@@ -231,15 +240,18 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
             ]
         )
 
-        fh.write(header)
-        copy_ratio_df.to_csv(
-            outfile, sep="\t", header=False, index=False, mode="a"
-        )
+        fh.write(f"{header}\n")
+
+    copy_ratio_df.to_csv(
+        outfile, sep="\t", header=False, index=False, mode="a"
+    )
 
     # compress & index
-    subprocess.call("bgzip {}".format(Path(outfile)), shell=True)
-    subprocess.call(
-        "tabix -f -S 2 -b 2 -e 3 {}.gz".format(Path(outfile)), shell=True
+    subprocess.run("bgzip {}".format(Path(outfile)), shell=True, check=True)
+    subprocess.run(
+        "tabix -f -S 2 -b 2 -e 3 {}.gz".format(Path(outfile)),
+        shell=True,
+        check=True,
     )
 
 
@@ -258,11 +270,12 @@ def main():
             copy_ratio_df, args.keep_all_samples
         )
 
+        start = timer()
+        print("\nWriting output files")
+
         if isinstance(per_sample_dfs, list):
             # writing per sample df with just sample trace + mean + std dev
-            for sample in per_sample_dfs:
-                sample_name = sample[0]
-                sample_df = sample[1]
+            for sample_name, sample_df in per_sample_dfs:
                 write_outfile(
                     copy_ratio_df=sample_df,
                     prefix=sample_name,
@@ -273,10 +286,12 @@ def main():
             # trace red and leaving all other sample traces in grey
             for sample in samples:
                 write_outfile(
-                    per_sample_dfs,
-                    sample,
+                    copy_ratio_df=per_sample_dfs,
+                    prefix=sample,
                     per_sample=True,
                 )
+
+        print(f"Wrote to output files in {round(timer() - start)}s")
 
 
 if __name__ == "__main__":
