@@ -439,7 +439,7 @@ _call_generate_gcnv_bed() {
     SECONDS=0
     python3 generate_gcnv_bed.py \
         --copy_ratios "$denoised_copy_ratio_files" \
-        -s --run "$run_name"
+        --per_sample --run "$run_name"
 
     duration=$SECONDS
     echo "Completed generating gCNV copy ratio visualisation files in $(($duration / 60))m$(($duration % 60))s"
