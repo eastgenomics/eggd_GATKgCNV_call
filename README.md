@@ -38,13 +38,6 @@ Input files (preprocessed and annotated target intervals) come from the [GATKgCN
 * `-idebug_fail_end` (`bool`): automatically fail the job after all commands have finished
 
 
-Parameters to calculate coverage, filter out low quality intervals and call variants:
-* low read depth threshold - discard intervals with low coverage across the majority of samples
-* low percentage threshold - if interval is covered below threshold in samples above this percentage then filter out that interval
-* minimum and maximum GC content of interval
-* minimum and maximum mappability of interval - depending if annotation.tsv has this information 
-* (minimum and maximum segmental duplication of interval) - depending on whether annotation.tsv has this information
-
 ## What does this app output?
 * `{sample_name}_intervals.vcf`: vcf with genotype of every interval in the input bed for the sample
 * `{sample_name}_segments.vcf`: vcf of merged consecutive intervals with the same CNV status
@@ -79,6 +72,16 @@ dx run app-eggd_GATKgCNV_call/ \
 > -ibambais=file-GPg000Q4fFQx748FQ8jZbbBB
 > -ibambais=file-GPfzzK049JXy1JKpGvJ5vJ7Q
 > ...
+
+
+## Notes
+
+Parameters used by GATK to calculate coverage, filter out low quality intervals and call variants:
+* low read depth threshold - discard intervals with low coverage across the majority of samples
+* low percentage threshold - if interval is covered below threshold in samples above this percentage then filter out that interval
+* minimum and maximum GC content of interval
+* minimum and maximum mappability of interval - depending if annotation.tsv has this information
+* minimum and maximum segmental duplication of interval - depending on whether annotation.tsv has this information
 
 
 ## Dependencies
