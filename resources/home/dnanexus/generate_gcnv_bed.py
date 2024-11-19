@@ -61,7 +61,10 @@ def parse_args():
 
 def generate_copy_ratio_df(args):
     """
-    Generates bed dataframe from multiple copy ratio files
+    Generates bed dataframe from multiple copy ratio files.
+
+    Will have the columns chr, start and end, then one column per sample
+    for the copy ratio bed tsv files provided.
 
     Returns:
     - copy_ratio_df (df): df of all samples and intervals
@@ -122,8 +125,8 @@ def generate_copy_ratio_df(args):
 
 def generate_per_sample_copy_ratio_dfs(copy_ratio_df, keep_all_samples):
     """
-    Generates one dataframe / bed file per sample, with run level mean
-    and std deviations added
+    Generates one dataframe per sample, with run level mean and std
+    deviations added as separate columns
 
     Args:
         - copy_ratio_df (df): df of all copy ratios of all samples
@@ -135,7 +138,7 @@ def generate_per_sample_copy_ratio_dfs(copy_ratio_df, keep_all_samples):
             is True, or list of tuples, with (name, df) per sample
     """
     start = timer()
-    print("\nCalculating mean values")
+    print("\nCalculating mean values for copy ratios")
 
     samples = copy_ratio_df.columns.tolist()[3:]
 
@@ -159,11 +162,14 @@ def generate_per_sample_copy_ratio_dfs(copy_ratio_df, keep_all_samples):
     )
 
     if keep_all_samples:
+        # single dataframe with all samples
         copy_ratio_df = pd.concat([copy_ratio_df, mean_std_df], axis="columns")
 
         print(f"Completed generating means in {round(timer() - start, 2)}s")
         return copy_ratio_df
     else:
+        # generating one dataframe per sample with the sample, mean and
+        # std deviations
         per_sample_dfs = []
 
         for sample in samples:
@@ -274,7 +280,7 @@ def main():
         )
 
         start = timer()
-        print("\nWriting output files")
+        print("\nWriting per sample output files")
 
         if isinstance(per_sample_dfs, list):
             # writing per sample df with just sample trace + mean + std dev
