@@ -39,7 +39,6 @@ def parse_args():
     parser.add_argument(
         "--keep_all_samples",
         action="store_true",
-        default=True,
         help=(
             "controls if to keep all sample traces in per sample visualisation"
             " bed files, if true all other samples will be anonymised grey"
@@ -79,7 +78,9 @@ def read_single_copy_ratio_file(copy_ratio_file) -> Tuple[str, pd.DataFrame]:
         while True:
             line = fh.readline()
             if not line:
-                raise ValueError(f"'@RG' header not found in {copy_ratio_file}")
+                raise ValueError(
+                    f"'@RG' header not found in {copy_ratio_file}"
+                )
             if line.startswith("@RG"):
                 sample_name = line.split("SM:")[1].strip()
                 break
@@ -130,8 +131,12 @@ def read_all_copy_ratio_files(copy_ratio_files) -> pd.DataFrame:
     for copy_ratio_file in copy_ratio_files:
         sample, sample_df = read_single_copy_ratio_file(copy_ratio_file)
 
-        if not copy_ratio_df[["chr", "start", "end"]].equals(sample_df[["chr", "start", "end"]]):
-            raise ValueError(f"Copy ratio file for {sample} has different intervals")
+        if not copy_ratio_df[["chr", "start", "end"]].equals(
+            sample_df[["chr", "start", "end"]]
+        ):
+            raise ValueError(
+                f"Copy ratio file for {sample} has different intervals"
+            )
 
         copy_ratio_df[sample] = sample_df[sample]
 
