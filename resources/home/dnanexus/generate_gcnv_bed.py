@@ -215,7 +215,10 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
             highlight = " ".join(
                 [f"highlight={x};{y}" for x, y in colours.items()]
             )
-            fh.write(f"track type=gcnv height=500 {highlight} \n")
+            fh.write(
+                "track type=gcnv height=500"
+                f" onlyHandleClicksForHighlightedSamples=true {highlight} \n"
+            )
         else:
             fh.write("track type=gcnv height=500 clickToHighlight=any \n")
 
