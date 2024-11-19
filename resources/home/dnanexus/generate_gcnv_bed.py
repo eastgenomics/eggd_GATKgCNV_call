@@ -5,6 +5,7 @@ Requires bgzip and tabix to be installed and on path.
 """
 
 import argparse
+from concurrent.futures import as_completed, ProcessPoolExecutor
 from pathlib import Path
 import subprocess
 from timeit import default_timer as timer
@@ -206,7 +207,9 @@ def write_run_level_bed_file(copy_ratio_df, prefix) -> None:
     compress_and_index_bed_file(outfile)
 
 
-def write_sample_bed_file(copy_ratio_df, sample, keep_all_samples) -> None:
+def write_sample_bed_file(
+    copy_ratio_df, sample_name, keep_all_samples
+) -> None:
     """
     Writes individual sample bed file.
 
@@ -218,18 +221,18 @@ def write_sample_bed_file(copy_ratio_df, sample, keep_all_samples) -> None:
     ----------
     copy_ratio_df : pd.DataFrame
         DataFrame of all intervals for all samples
-    sample : str
+    sample_name : str
         name of sample
     keep_all_samples : bool
         controls if to keep all sample values in the output file
     """
-    print(f"Creating output bed file for {sample}")
+    print(f"Creating output bed file for {sample_name}")
 
-    outfile = f"{sample}_copy_ratios.gcnv.bed"
+    outfile = f"{sample_name}_copy_ratios.gcnv.bed"
 
     # colour mapping for tracks, keys have to match column names in dataframe
     colours = {
-        sample: "red",
+        sample_name: "red",
         "mean": "blue",
         "mean_plus_std": "#0B2559",
         "mean_minus_std": "#0B2559",
@@ -246,7 +249,7 @@ def write_sample_bed_file(copy_ratio_df, sample, keep_all_samples) -> None:
         "mean_plus_std2",
         "mean_minus_std",
         "mean_minus_std2",
-        sample,
+        sample_name,
     ]
 
     if not keep_all_samples:
@@ -313,12 +316,32 @@ def main() -> None:
     if args.per_sample:
         copy_ratio_df = calculate_mean_and_std_dev(copy_ratio_df)
 
-        for sample in copy_ratio_df.columns.tolist()[3:]:
-            write_sample_bed_file(
-                copy_ratio_df=copy_ratio_df,
-                sample=sample,
-                keep_all_samples=args.keep_all_samples,
-            )
+        samples = [
+            Path(x).name.replace("_denoised_copy_ratios.tsv", "")
+            for x in args.copy_ratios
+        ]
+
+        with ProcessPoolExecutor(max_workers=8) as executor:
+            concurrent_jobs = {
+                executor.submit(
+                    write_sample_bed_file,
+                    sample_name=sample,
+                    copy_ratio_df=copy_ratio_df,
+                    keep_all_samples=args.keep_all_samples,
+                ): sample
+                for sample in samples
+            }
+
+            for future in as_completed(concurrent_jobs):
+                # access returned output as each is returned in any order
+                try:
+                    future.result()
+                except Exception as error:
+                    print(
+                        "Error in writing output file for"
+                        f" {concurrent_jobs[future]}"
+                    )
+                    raise error
 
 
 if __name__ == "__main__":
