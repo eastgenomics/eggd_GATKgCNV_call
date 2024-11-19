@@ -40,8 +40,9 @@ def parse_args():
         action="store_true",
         default=True,
         help=(
-            "controls if to keep all sample traces in per sample files, "
-            "if true all other samples will be coloured grey with no labels"
+            "controls if to keep all sample traces in per sample visualisation"
+            " bed files, if true all other samples will be anonymised grey"
+            " traces"
         ),
     )
 
