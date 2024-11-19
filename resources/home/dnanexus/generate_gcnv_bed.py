@@ -6,6 +6,7 @@ Requires bgzip and tabix to be installed and on path.
 
 import argparse
 from concurrent.futures import as_completed, ProcessPoolExecutor
+from os import cpu_count
 from pathlib import Path
 import subprocess
 from timeit import default_timer as timer
@@ -323,7 +324,7 @@ def main() -> None:
             for x in args.copy_ratios
         ]
 
-        with ProcessPoolExecutor(max_workers=8) as executor:
+        with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
             concurrent_jobs = {
                 executor.submit(
                     write_sample_bed_file,
