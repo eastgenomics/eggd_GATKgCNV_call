@@ -78,6 +78,8 @@ def read_single_copy_ratio_file(copy_ratio_file) -> Tuple[str, pd.DataFrame]:
         # read through file until last line of header with sample name
         while True:
             line = fh.readline()
+            if not line:
+                raise ValueError(f"'@RG' header not found in {copy_ratio_file}")
             if line.startswith("@RG"):
                 sample_name = line.split("SM:")[1].strip()
                 break
