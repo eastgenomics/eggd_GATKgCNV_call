@@ -437,9 +437,13 @@ _call_generate_gcnv_bed() {
     denoised_copy_ratio_files=$(find inputs/vcfs/ -name "*_denoised_copy_ratios.tsv")
 
     SECONDS=0
+
+    keep_samples_arg=""
+    if [[ "$keep_all_sample_traces" == "true" ]]; then keep_samples_arg="--keep_all_samples "; fi
+
     python3 generate_gcnv_bed.py \
         --copy_ratios "$denoised_copy_ratio_files" \
-        --per_sample --run "$run_name"
+        --per_sample "$keep_samples_arg" --run "$run_name"
 
     duration=$SECONDS
     echo "Completed generating gCNV copy ratio visualisation files in $(($duration / 60))m$(($duration % 60))s"

@@ -40,7 +40,7 @@ def parse_args():
         default=True,
         help=(
             "controls if to keep all sample traces in per sample files, "
-            "if true all other samples will be coloured grey"
+            "if true all other samples will be coloured grey with no labels"
         ),
     )
 
