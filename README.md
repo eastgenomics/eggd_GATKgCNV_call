@@ -34,6 +34,7 @@ Input files (preprocessed and annotated target intervals) come from the [GATKgCN
 * `-iDetermineGermlineContigPloidy_args` (`str`): optional command line arguments for DetermineGermlineContigPloidy
 * `-iGermlineCNVCaller_args` (`str`): optional command line arguments for GermlineCNVCaller
 * `-iPostprocessGermlineCNVCalls_args` (`str`): optional command line arguments for PostprocessGermlineCNVCalls
+* `-ikeep_all_sample_traces` (`bool`): controls if to keep all sample traces in per sample visualisation bed files, if true all other samples will be anonymised grey traces
 * `-idebug_fail_start` (`bool`): automatically fail the job after inputs have been downloaded
 * `-idebug_fail_end` (`bool`): automatically fail the job after all commands have finished
 
