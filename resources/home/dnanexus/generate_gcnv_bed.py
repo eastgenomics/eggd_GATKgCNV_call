@@ -202,7 +202,7 @@ def write_outfile(copy_ratio_df, prefix, per_sample):
         # a gcnv bed as it can't automatically set this track type
         if per_sample:
             # colour mapping for tracks
-            # keys have to match colummn names in sample_df
+            # keys have to match column names in sample_df
             colours = {
                 prefix: "red",
                 "mean": "blue",
