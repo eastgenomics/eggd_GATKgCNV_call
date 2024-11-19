@@ -130,9 +130,8 @@ def read_all_copy_ratio_files(copy_ratio_files) -> pd.DataFrame:
     for copy_ratio_file in copy_ratio_files:
         sample, sample_df = read_single_copy_ratio_file(copy_ratio_file)
 
-        assert copy_ratio_df[["chr", "start", "end"]].equals(
-            sample_df[["chr", "start", "end"]]
-        ), f"Copy ratio file for {sample} has different intervals "
+        if not copy_ratio_df[["chr", "start", "end"]].equals(sample_df[["chr", "start", "end"]]):
+            raise ValueError(f"Copy ratio file for {sample} has different intervals")
 
         copy_ratio_df[sample] = sample_df[sample]
 
