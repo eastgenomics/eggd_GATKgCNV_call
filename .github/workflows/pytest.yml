@@ -13,10 +13,10 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pipenv codecov pytest pytest-cov pytest-html pytest-metadata pytest-mock pytest-random pytest-repeat pytest-subtests
+        pip install pipenv codecov pytest pytest-cov pytest-metadata pytest-mock pytest-subtests
         pip install --no-index --no-deps resources/home/dnanexus/packages/*
         pipenv install --dev
     - name: Test with pytest
       run: |
-        pytest -v --cov --count 10 --random-order resources/home/dnanexus/generate_gcnv_bed/tests/unit/
+        pytest -v --cov resources/home/dnanexus/generate_gcnv_bed/tests/unit/
 
