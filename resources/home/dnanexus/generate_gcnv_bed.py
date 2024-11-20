@@ -44,9 +44,9 @@ def parse_args():
         "--keep_all_samples",
         action="store_true",
         help=(
-            "controls if to keep all sample traces in per sample visualisation"
-            " bed files, if true all other samples will be anonymised grey"
-            " traces"
+            "controls whether to keep all sample traces in per sample"
+            " visualisation bed files, if true all other samples will be"
+            " anonymised grey traces"
         ),
     )
 
