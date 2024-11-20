@@ -369,3 +369,193 @@ class TestWriteRunLevelBedFile(unittest.TestCase):
         )
 
         self.assertTrue(written_df.equals(self.copy_ratio_df))
+
+
+class TestWriteSampleBedFile(unittest.TestCase):
+    def setUp(self):
+        self.copy_ratio_df = read_all_copy_ratio_files(
+            glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+        )
+        self.copy_ratio_df = calculate_mean_and_std_dev(
+            copy_ratio_df=self.copy_ratio_df
+        )
+
+    def tearDown(self):
+        if Path("sample_1_copy_ratios.gcnv.bed.gz").exists():
+            os.remove(Path("sample_1_copy_ratios.gcnv.bed.gz"))
+
+        if Path("sample_1_copy_ratios.gcnv.bed.gz.tbi").exists():
+            os.remove(Path("sample_1_copy_ratios.gcnv.bed.gz.tbi"))
+
+    def test_contents_correct_when_keep_all_samples_true(self):
+        """
+        When keep_all_samples=true, all samples traces are written to
+        the file but the other sample names are replaced with a
+        whitespace in the header to anonymise them
+        """
+        write_sample_bed_file(
+            copy_ratio_df=self.copy_ratio_df,
+            sample_name="sample_1",
+            keep_all_samples=True,
+        )
+
+        with gzip.open("sample_1_copy_ratios.gcnv.bed.gz", mode="r") as fh:
+            contents = fh.read().decode().splitlines()
+
+        with self.subTest("header correct"):
+            self.assertEqual(
+                contents[0],
+                "track type=gcnv height=500"
+                " onlyHandleClicksForHighlightedSamples=true"
+                " highlight=sample_1;red highlight=mean;blue"
+                " highlight=mean_plus_std;#0B2559"
+                " highlight=mean_minus_std;#0B2559"
+                " highlight=mean_plus_std2;#36BFB1"
+                " highlight=mean_minus_std2;#36BFB1 ",
+            )
+
+        with self.subTest("columns correct"):
+            self.assertEqual(
+                contents[1].split("\t"),
+                [
+                    "chr",
+                    "start",
+                    "end",
+                    "sample_1",
+                    "⠀",
+                    "⠀",
+                    "mean",
+                    "mean_plus_std",
+                    "mean_plus_std2",
+                    "mean_minus_std",
+                    "mean_minus_std2",
+                ],
+            )
+
+        with self.subTest("values correctly written"):
+            written_df = pd.read_csv(
+                "sample_1_copy_ratios.gcnv.bed.gz",
+                compression="infer",
+                sep="\t",
+                skiprows=2,
+                float_precision="round_trip",
+                names=[
+                    "chr",
+                    "start",
+                    "end",
+                    "sample_1",
+                    "sample_2",
+                    "sample_3",
+                    "mean",
+                    "mean_plus_std",
+                    "mean_plus_std2",
+                    "mean_minus_std",
+                    "mean_minus_std2",
+                ],
+                dtype={
+                    "chr": str,
+                    "start": int,
+                    "end": int,
+                    "sample_1": float,
+                    "sample_2": float,
+                    "sample_3": float,
+                    "mean": float,
+                    "mean_plus_std": float,
+                    "mean_plus_std2": float,
+                    "mean_minus_std": float,
+                    "mean_minus_std2": float,
+                },
+            )
+
+            self.assertTrue(written_df.equals(self.copy_ratio_df))
+
+    def test_contents_correct_when_keep_all_samples_false(self):
+        """
+        When keep_all_samples=false, the only columns retained are the
+        regions, calculated values and the specified sample. Therefore,
+        the other sample columns should not be present in the header and
+        we should only have sample_1 values.
+        """
+        write_sample_bed_file(
+            copy_ratio_df=self.copy_ratio_df,
+            sample_name="sample_1",
+            keep_all_samples=False,
+        )
+
+        with gzip.open("sample_1_copy_ratios.gcnv.bed.gz", mode="r") as fh:
+            contents = fh.read().decode().splitlines()
+
+        with self.subTest("header correct"):
+            self.assertEqual(
+                contents[0],
+                "track type=gcnv height=500"
+                " onlyHandleClicksForHighlightedSamples=true"
+                " highlight=sample_1;red highlight=mean;blue"
+                " highlight=mean_plus_std;#0B2559"
+                " highlight=mean_minus_std;#0B2559"
+                " highlight=mean_plus_std2;#36BFB1"
+                " highlight=mean_minus_std2;#36BFB1 ",
+            )
+
+        with self.subTest("columns correct"):
+            self.assertEqual(
+                contents[1].split("\t"),
+                [
+                    "chr",
+                    "start",
+                    "end",
+                    "mean",
+                    "mean_plus_std",
+                    "mean_plus_std2",
+                    "mean_minus_std",
+                    "mean_minus_std2",
+                    "sample_1",
+                ],
+            )
+
+        with self.subTest("values correctly written"):
+            written_df = pd.read_csv(
+                "sample_1_copy_ratios.gcnv.bed.gz",
+                compression="infer",
+                sep="\t",
+                skiprows=2,
+                float_precision="round_trip",
+                names=[
+                    "chr",
+                    "start",
+                    "end",
+                    "mean",
+                    "mean_plus_std",
+                    "mean_plus_std2",
+                    "mean_minus_std",
+                    "mean_minus_std2",
+                    "sample_1",
+                ],
+                dtype={
+                    "chr": str,
+                    "start": int,
+                    "end": int,
+                    "sample_1": float,
+                    "mean": float,
+                    "mean_plus_std": float,
+                    "mean_plus_std2": float,
+                    "mean_minus_std": float,
+                    "mean_minus_std2": float,
+                },
+            )
+
+            copy_ratio_df_only_sample_1 = self.copy_ratio_df[
+                [
+                    "chr",
+                    "start",
+                    "end",
+                    "mean",
+                    "mean_plus_std",
+                    "mean_plus_std2",
+                    "mean_minus_std",
+                    "mean_minus_std2",
+                    "sample_1",
+                ]
+            ]
+
+            self.assertTrue(written_df.equals(copy_ratio_df_only_sample_1))
