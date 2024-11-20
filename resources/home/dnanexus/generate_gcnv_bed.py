@@ -77,6 +77,11 @@ def read_single_copy_ratio_file(copy_ratio_file) -> Tuple[str, pd.DataFrame]:
     pd.DataFrame
         intervals and copy ratio values read in from file
     """
+    if not Path(copy_ratio_file).is_file():
+        raise FileNotFoundError(
+            f"Copy ratio file not found: {copy_ratio_file}"
+        )
+
     with open(copy_ratio_file, encoding="utf-8", mode="r") as fh:
         # read through file until last line of header with sample name
         while True:
@@ -89,13 +94,18 @@ def read_single_copy_ratio_file(copy_ratio_file) -> Tuple[str, pd.DataFrame]:
                 sample_name = line.split("SM:")[1].strip()
                 break
 
-    file_df = pd.read_csv(
-        copy_ratio_file,
-        sep="\t",
-        comment="@",
-        header=0,
-        names=["chr", "start", "end", sample_name],
-    )
+    try:
+        file_df = pd.read_csv(
+            copy_ratio_file,
+            sep="\t",
+            comment="@",
+            header=0,
+            names=["chr", "start", "end", sample_name],
+        )
+    except pd.errors.EmptyDataError:
+        raise ValueError(f"No data found in file: {copy_ratio_file}")
+    except Exception as e:
+        raise ValueError(f"Error reading file {copy_ratio_file}: {str(e)}")
 
     return sample_name, file_df
 
@@ -155,7 +165,7 @@ def read_all_copy_ratio_files(copy_ratio_files) -> pd.DataFrame:
 def calculate_mean_and_std_dev(copy_ratio_df) -> pd.DataFrame:
     """
     Calculate the mean and 2 standard deviations for each interval
-    across all samples
+    across all samples and add as additional columns
 
     Parameters
     ----------
@@ -168,6 +178,16 @@ def calculate_mean_and_std_dev(copy_ratio_df) -> pd.DataFrame:
         DataFrame of all intervals for all samples with mean and std devs
     """
     print("\nCalculating mean values for copy ratios")
+
+    samples = copy_ratio_df.columns.tolist()[3:]
+    if not samples:
+        raise ValueError("No sample columns found in DataFrame")
+
+    # ensure we have enough samples for meaningful statistics
+    if len(samples) < 2:
+        raise ValueError(
+            "At least 2 samples are required to calculate standard deviation"
+        )
 
     samples = copy_ratio_df.columns.tolist()[3:]
     start = timer()
@@ -211,7 +231,7 @@ def write_run_level_bed_file(copy_ratio_df, prefix) -> None:
     """
     outfile = f"{prefix}_copy_ratios.gcnv.bed"
 
-    with open(outfile, "w") as fh:
+    with open(outfile, encoding="utf-8", mode="w") as fh:
         # this line is needed at the beginning to tell igv.js that it is
         # a gcnv bed as it can't automatically set this track type
         fh.write("track type=gcnv height=500 clickToHighlight=any \n")
