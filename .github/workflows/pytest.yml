@@ -16,6 +16,22 @@ jobs:
         pip install pipenv codecov pytest pytest-cov pytest-metadata pytest-mock pytest-subtests six
         pip install --no-index --no-deps resources/home/dnanexus/packages/*
         pipenv install --dev
+    - name: Build bcftools
+      run: |
+        wget https://github.com/samtools/bcftools/releases/download/1.18/bcftools-1.18.tar.bz2
+        tar xf bcftools-1.18.tar.bz2
+        cd bcftools-1.18
+        ./configure --prefix=/usr/local/
+        sudo make
+        sudo make install
+    - name: Build htslib
+      run: |
+        wget https://github.com/samtools/htslib/releases/download/1.18/htslib-1.18.tar.bz2
+        tar xf htslib-1.18.tar.bz2
+        cd htslib-1.18
+        ./configure --prefix=/usr/local/
+        sudo make
+        sudo make install
     - name: Test with pytest
       run: |
         pytest -v --cov resources/home/dnanexus/generate_gcnv_bed/tests/unit/
