@@ -189,7 +189,6 @@ def calculate_mean_and_std_dev(copy_ratio_df) -> pd.DataFrame:
             "At least 2 samples are required to calculate standard deviation"
         )
 
-    samples = copy_ratio_df.columns.tolist()[3:]
     start = timer()
 
     # calculate mean and std dev across all samples (rows)
