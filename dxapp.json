@@ -171,7 +171,7 @@
             "class": "boolean",
             "optional": true,
             "default": true,
-            "help": "controls if to keep all samples traces as anonymised grey lines in the per sample visualisation bed file"
+            "help": "controls whether to keep all samples traces as anonymised grey lines in the per sample visualisation bed file"
         }
     ],
     "outputSpec": [
