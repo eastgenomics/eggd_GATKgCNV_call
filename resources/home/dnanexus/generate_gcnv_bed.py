@@ -1,5 +1,9 @@
 """
-Script to generate bed file from a run of cnv calls and intervals list.
+Script to generate visualisation bed files for loading in igv.js.
+
+This takes in all the *_copy_ratio.tsv files output from GATK
+gCNVGermlineCNVCaller, and generates one per run and per sample
+bed files to view the calls in IGV.
 
 Requires bgzip and tabix to be installed and on path.
 """
