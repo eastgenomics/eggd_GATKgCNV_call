@@ -2,12 +2,12 @@
 Tests for generate_gcnv_bed.py
 """
 
+from argparse import Namespace
 from glob import glob
 import gzip
 from math import sqrt
 import os
 from pathlib import Path
-import shutil
 from uuid import uuid4
 import unittest
 from unittest.mock import patch
@@ -23,11 +23,41 @@ pd.option_context("display.max_columns", 18)
 from ..generate_gcnv_bed import (
     calculate_mean_and_std_dev,
     compress_and_index_bed_file,
+    main,
+    parse_args,
     read_single_copy_ratio_file,
     read_all_copy_ratio_files,
     write_run_level_bed_file,
     write_sample_bed_file,
 )
+
+
+def test_parse_args():
+    """
+    Test that when we call parse args we correctly filter out the
+    interval_list tsv if this is accidentally included in the copy
+    ratio files
+    """
+    with patch(
+        "generate_gcnv_bed.generate_gcnv_bed.argparse.ArgumentParser.parse_args"
+    ) as mock_parse_args:
+        mock_parse_args.return_value = Namespace(
+            copy_ratios=[
+                "sample_1_denoised_copy_ratios.tsv",
+                "sample_2_denoised_copy_ratios.tsv",
+                "my_assay.interval_list.tsv",
+            ],
+            run="run_1",
+            per_sample=True,
+            keep_all_samples=True,
+        )
+
+        args = parse_args()
+
+        assert args.copy_ratios == [
+            "sample_1_denoised_copy_ratios.tsv",
+            "sample_2_denoised_copy_ratios.tsv",
+        ], "interval_list not correctly excluded"
 
 
 class TestReadSingleCopyRatioFile(unittest.TestCase):
@@ -580,3 +610,110 @@ class TestCompressAndIndexBedFile(unittest.TestCase):
 
         os.remove(f"{test_file}.gz")
         os.remove(f"{test_file}.gz.tbi")
+
+
+class TestMain(unittest.TestCase):
+    """
+    Tests for main, these are mostly just checking correct call tree
+    and not for correctness of input/output of individual functions
+    """
+
+    @patch("generate_gcnv_bed.generate_gcnv_bed.parse_args")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.read_all_copy_ratio_files")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.write_run_level_bed_file")
+    def test_function_calls_when_per_sample_false(
+        self, mock_write, mock_read, mock_args
+    ):
+        """
+        Test correct function calls when per_sample arg set to False
+        (i.e. just generating run level file)
+        """
+        mock_args.return_value = Namespace(
+            copy_ratios=[
+                "sample_1_denoised_copy_ratios.tsv",
+                "sample_2_denoised_copy_ratios.tsv",
+            ],
+            run="run_1",
+            per_sample=False,
+        )
+
+        mock_read.return_value = pd.DataFrame()
+
+        main()
+
+        with self.subTest("read_all_copy_ratio_files correctly called"):
+            self.assertEqual(
+                mock_read.call_args[1],
+                {
+                    "copy_ratio_files": [
+                        "sample_1_denoised_copy_ratios.tsv",
+                        "sample_2_denoised_copy_ratios.tsv",
+                    ]
+                },
+            )
+
+        with self.subTest("write_run_level_bed_file correctly called"):
+            self.assertEqual(
+                mock_write.call_args[1],
+                {"copy_ratio_df": mock_read.return_value, "prefix": "run_1"},
+            )
+
+    @patch("generate_gcnv_bed.generate_gcnv_bed.parse_args")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.as_completed")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.ProcessPoolExecutor.submit")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.write_sample_bed_file")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.write_run_level_bed_file")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.read_all_copy_ratio_files")
+    @patch("generate_gcnv_bed.generate_gcnv_bed.calculate_mean_and_std_dev")
+    def test_function_calls_when_per_sample_true(
+        self,
+        mock_calculate_mean,
+        mock_read,
+        mock_write_run_bed,
+        mock_write_sample_bed,
+        mock_process_pool_submit,
+        mock_as_completed,
+        mock_args,
+    ):
+        """
+        Test correct function calls when per_sample arg set to True.
+
+        Mock pretty much everything and test what we submit to the
+        ProcessPoolExecutor (i.e. to write each samples bed file) is
+        as expected. This has the side effect of testing we correctly
+        parse the sample name from the copy ratio files since this is
+        an input to each call of write_sample_bed_file.
+        """
+        mock_args.return_value = Namespace(
+            copy_ratios=[
+                "sample_1_denoised_copy_ratios.tsv",
+                "sample_2_denoised_copy_ratios.tsv",
+            ],
+            run="run_1",
+            per_sample=True,
+            keep_all_samples=True,
+        )
+
+        mock_read.return_value = pd.DataFrame()
+        mock_calculate_mean.return_value = pd.DataFrame()
+
+        main()
+
+        with self.subTest("write_sample_bed_file correct args"):
+            expected_args = [
+                {
+                    "sample_name": "sample_1",
+                    "copy_ratio_df": mock_calculate_mean.return_value,
+                    "keep_all_samples": True,
+                },
+                {
+                    "sample_name": "sample_2",
+                    "copy_ratio_df": mock_calculate_mean.return_value,
+                    "keep_all_samples": True,
+                },
+            ]
+
+            self.assertEqual(
+                expected_args,
+                [x[1] for x in mock_process_pool_submit.call_args_list],
+            )
