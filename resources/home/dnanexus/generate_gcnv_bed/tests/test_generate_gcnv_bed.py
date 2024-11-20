@@ -3,6 +3,7 @@ Tests for generate_gcnv_bed.py
 """
 
 from glob import glob
+import gzip
 from math import sqrt
 import os
 from pathlib import Path
@@ -14,6 +15,9 @@ import pandas as pd
 import pytest
 
 TEST_DATA_DIR = Path(__file__).absolute().parent.joinpath("test_data")
+
+pd.option_context("display.precision", 18)
+pd.option_context("display.max_columns", 18)
 
 from ..generate_gcnv_bed import (
     calculate_mean_and_std_dev,
@@ -292,3 +296,76 @@ class TestCalculateMeanAndStdDev(unittest.TestCase):
             ),
         ):
             calculate_mean_and_std_dev(copy_ratio_df_one_sample)
+
+
+class TestWriteRunLevelBedFile(unittest.TestCase):
+    def setUp(self):
+        self.copy_ratio_df = read_all_copy_ratio_files(
+            glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+        )
+        self.copy_ratio_df = calculate_mean_and_std_dev(
+            copy_ratio_df=self.copy_ratio_df
+        )
+
+        self.output_prefix = uuid4().hex
+
+        write_run_level_bed_file(
+            copy_ratio_df=self.copy_ratio_df, prefix=self.output_prefix
+        )
+
+    def tearDown(self):
+        if Path(f"{self.output_prefix}_copy_ratios.gcnv.bed.gz").exists():
+            os.remove(Path(f"{self.output_prefix}_copy_ratios.gcnv.bed.gz"))
+
+        if Path(f"{self.output_prefix}_copy_ratios.gcnv.bed.gz.tbi").exists():
+            os.remove(
+                Path(f"{self.output_prefix}_copy_ratios.gcnv.bed.gz.tbi")
+            )
+
+    def test_header_correctly_written_to_output_file(self):
+        with gzip.open(
+            f"{self.output_prefix}_copy_ratios.gcnv.bed.gz", mode="r"
+        ) as fh:
+            contents = fh.read().splitlines()
+
+        expected_header = "track type=gcnv height=500 clickToHighlight=any "
+
+        self.assertEqual(expected_header, contents[0].decode())
+
+    def test_contents_correctly_written_to_file(self):
+
+        written_df = pd.read_csv(
+            f"{self.output_prefix}_copy_ratios.gcnv.bed.gz",
+            compression="infer",
+            sep="\t",
+            skiprows=2,
+            float_precision="round_trip",
+            names=[
+                "chr",
+                "start",
+                "end",
+                "sample_1",
+                "sample_2",
+                "sample_3",
+                "mean",
+                "mean_plus_std",
+                "mean_plus_std2",
+                "mean_minus_std",
+                "mean_minus_std2",
+            ],
+            dtype={
+                "chr": str,
+                "start": int,
+                "end": int,
+                "sample_1": float,
+                "sample_2": float,
+                "sample_3": float,
+                "mean": float,
+                "mean_plus_std": float,
+                "mean_plus_std2": float,
+                "mean_minus_std": float,
+                "mean_minus_std2": float,
+            },
+        )
+
+        self.assertTrue(written_df.equals(self.copy_ratio_df))
