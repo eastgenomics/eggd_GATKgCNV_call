@@ -259,8 +259,6 @@ def write_sample_bed_file(
     keep_all_samples : bool
         controls if to keep all sample values in the output file
     """
-    print(f"Creating output bed file for {sample_name}")
-
     outfile = f"{sample_name}_copy_ratios.gcnv.bed"
 
     # colour mapping for tracks, keys have to match column names in dataframe
@@ -354,6 +352,9 @@ def main() -> None:
             for x in args.copy_ratios
         ]
 
+        print(f"Writing bed files for all {len(args.copy_ratios)} samples")
+        start = timer()
+
         with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
             concurrent_jobs = {
                 executor.submit(
@@ -375,6 +376,8 @@ def main() -> None:
                         f" {concurrent_jobs[future]}"
                     )
                     raise error
+
+        print(f"Completed writing bed files in {round(timer() - start, 2)}s")
 
 
 if __name__ == "__main__":
