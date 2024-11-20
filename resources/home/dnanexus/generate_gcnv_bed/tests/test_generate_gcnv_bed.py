@@ -3,9 +3,9 @@ Tests for generate_gcnv_bed.py
 """
 
 from glob import glob
+from math import sqrt
 import os
 from pathlib import Path
-import shutil
 from uuid import uuid4
 import unittest
 from unittest.mock import patch
@@ -190,3 +190,105 @@ class TestReadAllCopyRatioFiles(unittest.TestCase):
                 read_all_copy_ratio_files(copy_ratio_files=copy_ratio_files)
 
         os.remove(diff_intervals_tsv)
+
+
+class TestCalculateMeanAndStdDev(unittest.TestCase):
+
+    def setUp(self):
+        self.copy_ratio_df = read_all_copy_ratio_files(
+            glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+        )
+        self.copy_ratio_df = calculate_mean_and_std_dev(
+            copy_ratio_df=self.copy_ratio_df
+        )
+
+    def test_resultant_dataframe_has_expected_columns(self):
+
+        expected_columns = [
+            "chr",
+            "start",
+            "end",
+            "sample_1",
+            "sample_2",
+            "sample_3",
+            "mean",
+            "mean_plus_std",
+            "mean_plus_std2",
+            "mean_minus_std",
+            "mean_minus_std2",
+        ]
+
+        self.assertEqual(
+            sorted(expected_columns), sorted(self.copy_ratio_df.columns)
+        )
+
+    def test_mean_and_std_dev_correctly_calculated(self):
+        """
+        Expected intervals and per sample values used to calculate:
+
+        | chr | start    | end      | sample_1 | sample_2 | sample_3 |
+        |-----|----------|----------|----------|----------|----------|
+        | 1   | 7917094  | 7917213  | 1.948685 | 1.682542 | 2.036988 |
+        | 1   | 10566156 | 10566275 | 2.079746 | 1.898935 | 2.013257 |
+        | 1   | 17345176 | 17345329 | 1.980761 | 1.94943  | 1.967987 |
+        | 1   | 17345330 | 17345483 | 2.001148 | 1.938946 | 2.139657 |
+        | 1   | 17348949 | 17349114 | 1.981143 | 2.015844 | 1.962201 |
+        """
+        calculated_values = self.copy_ratio_df[
+            [
+                "mean",
+                "mean_plus_std",
+                "mean_plus_std2",
+                "mean_minus_std",
+                "mean_minus_std2",
+            ]
+        ].to_dict(orient="records")
+
+        # iterrows is slow and terrible but using it here for clarity
+        # manually calculate the expected values from the sample values
+        # for each interval to test against the output of
+        # calculate_mean_and_std_dev
+        expected_values = []
+
+        for _, row in self.copy_ratio_df.iterrows():
+            sample_values = row[["sample_1", "sample_2", "sample_3"]]
+
+            mean = sum(sample_values) / len(sample_values)
+            std_dev = sqrt(
+                sum((x - mean) ** 2 for x in sample_values)
+                / (len(sample_values) - 1)
+            )
+
+            expected_values.append(
+                {
+                    "mean": mean,
+                    "mean_plus_std": mean + std_dev,
+                    "mean_plus_std2": mean + (std_dev * 2),
+                    "mean_minus_std": mean - std_dev,
+                    "mean_minus_std2": mean - (std_dev * 2),
+                }
+            )
+
+        self.assertEqual(expected_values, calculated_values)
+
+    def test_value_error_raised_when_no_sample_columns_present(self):
+        copy_ratio_df_no_samples = self.copy_ratio_df[["chr", "start", "end"]]
+
+        with pytest.raises(
+            ValueError, match="No sample columns found in DataFrame"
+        ):
+            calculate_mean_and_std_dev(copy_ratio_df_no_samples)
+
+    def test_value_error_raised_if_only_one_sample_column_present(self):
+        copy_ratio_df_one_sample = self.copy_ratio_df[
+            ["chr", "start", "end", "sample_1"]
+        ]
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                "At least 2 samples are required to calculate standard"
+                " deviation"
+            ),
+        ):
+            calculate_mean_and_std_dev(copy_ratio_df_one_sample)
