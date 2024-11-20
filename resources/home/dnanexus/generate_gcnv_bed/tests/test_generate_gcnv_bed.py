@@ -7,6 +7,7 @@ import gzip
 from math import sqrt
 import os
 from pathlib import Path
+import shutil
 from uuid import uuid4
 import unittest
 from unittest.mock import patch
@@ -21,6 +22,7 @@ pd.option_context("display.max_columns", 18)
 
 from ..generate_gcnv_bed import (
     calculate_mean_and_std_dev,
+    compress_and_index_bed_file,
     read_single_copy_ratio_file,
     read_all_copy_ratio_files,
     write_run_level_bed_file,
@@ -559,3 +561,22 @@ class TestWriteSampleBedFile(unittest.TestCase):
             ]
 
             self.assertTrue(written_df.equals(copy_ratio_df_only_sample_1))
+
+
+class TestCompressAndIndexBedFile(unittest.TestCase):
+    def test_compressed_file_and_index_generated(self):
+        test_file = f"{uuid4().hex}.bed"
+
+        with open(test_file, encoding="utf-8", mode="w") as fh:
+            fh.write("1\t123\t456")
+
+        compress_and_index_bed_file(test_file)
+
+        with self.subTest("compressed file generated"):
+            self.assertTrue(Path(f"{test_file}.gz").exists())
+
+        with self.subTest("index file generated"):
+            self.assertTrue(Path(f"{test_file}.gz.tbi").exists())
+
+        os.remove(f"{test_file}.gz")
+        os.remove(f"{test_file}.gz.tbi")
