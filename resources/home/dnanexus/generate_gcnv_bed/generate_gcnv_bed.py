@@ -101,11 +101,16 @@ def read_single_copy_ratio_file(copy_ratio_file) -> Tuple[str, pd.DataFrame]:
             comment="@",
             header=0,
             names=["chr", "start", "end", sample_name],
+            dtype={"chr": str, "start": int, "end": int, sample_name: float},
+            float_precision="high",
         )
-    except pd.errors.EmptyDataError:
+    except Exception as exc:
+        raise ValueError(
+            f"Error reading file {copy_ratio_file}: {str(exc)}"
+        ) from exc
+
+    if file_df.empty:
         raise ValueError(f"No data found in file: {copy_ratio_file}")
-    except Exception as e:
-        raise ValueError(f"Error reading file {copy_ratio_file}: {str(e)}")
 
     return sample_name, file_df
 
