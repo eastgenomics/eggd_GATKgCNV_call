@@ -240,6 +240,8 @@ def write_run_level_bed_file(copy_ratio_df, prefix) -> None:
         name of run to prefix output file name with
     """
     outfile = f"{prefix}_copy_ratios.gcnv.bed"
+    print(f"Writing run level bed to {outfile}")
+    start = timer()
 
     with open(outfile, encoding="utf-8", mode="w") as fh:
         # this line is needed at the beginning to tell igv.js that it is
@@ -248,6 +250,8 @@ def write_run_level_bed_file(copy_ratio_df, prefix) -> None:
 
     copy_ratio_df.to_csv(outfile, sep="\t", header=True, index=False, mode="a")
     compress_and_index_bed_file(outfile)
+
+    print(f"Completed writing run bed in {round(timer() - start, 2)}s")
 
 
 def write_sample_bed_file(
