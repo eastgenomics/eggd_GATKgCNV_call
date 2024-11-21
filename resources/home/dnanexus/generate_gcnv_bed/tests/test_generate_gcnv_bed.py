@@ -17,9 +17,6 @@ import pytest
 
 TEST_DATA_DIR = Path(__file__).absolute().parent.joinpath("test_data")
 
-pd.option_context("display.precision", 18)
-pd.option_context("display.max_columns", 18)
-
 from ..generate_gcnv_bed import (
     calculate_mean_and_std_dev,
     compress_and_index_bed_file,
