@@ -422,8 +422,8 @@ class TestWriteSampleBedFile(unittest.TestCase):
     def test_contents_correct_when_keep_all_samples_true(self):
         """
         When keep_all_samples=true, all samples traces are written to
-        the file but the other sample names are replaced with a
-        whitespace in the header to anonymise them
+        the file but the other sample names are replaced with a `.`
+        in the header to anonymise them
         """
         write_sample_bed_file(
             copy_ratio_df=self.copy_ratio_df,
@@ -454,8 +454,8 @@ class TestWriteSampleBedFile(unittest.TestCase):
                     "start",
                     "end",
                     "sample_1",
-                    "⠀",
-                    "⠀",
+                    ".",
+                    ".",
                     "mean",
                     "mean_plus_std",
                     "mean_plus_std2",
