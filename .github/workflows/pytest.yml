@@ -13,6 +13,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install pipenv codecov
         pip install pipenv codecov pytest pytest-cov pytest-metadata pytest-mock pytest-subtests six
         pip install --no-index --no-deps resources/home/dnanexus/packages/*
         pipenv install --dev
