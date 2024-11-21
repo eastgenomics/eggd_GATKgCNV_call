@@ -6,6 +6,7 @@ from argparse import Namespace
 from glob import glob
 import gzip
 from math import sqrt
+import numpy as np
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -87,6 +88,15 @@ class TestReadSingleCopyRatioFile(unittest.TestCase):
                     1.9811431848626703,
                 ],
             },
+        )
+
+        expected_df = expected_df.astype(
+            {
+                "chr": "category",
+                "start": np.uint32,
+                "end": np.uint32,
+                "sample_1": float,
+            }
         )
 
         _, parsed_df = read_single_copy_ratio_file(
@@ -180,6 +190,16 @@ class TestReadAllCopyRatioFiles(unittest.TestCase):
                     1.9622012727554363,
                 ],
             },
+        )
+        expected_df = expected_df.astype(
+            {
+                "chr": "category",
+                "start": np.uint32,
+                "end": np.uint32,
+                "sample_1": float,
+                "sample_2": float,
+                "sample_3": float,
+            }
         )
 
         self.assertTrue(copy_ratio_df.equals(expected_df))
@@ -383,9 +403,9 @@ class TestWriteRunLevelBedFile(unittest.TestCase):
                 "mean_minus_std2",
             ],
             dtype={
-                "chr": str,
-                "start": int,
-                "end": int,
+                "chr": "category",
+                "start": np.uint32,
+                "end": np.uint32,
                 "sample_1": float,
                 "sample_2": float,
                 "sample_3": float,
@@ -482,9 +502,9 @@ class TestWriteSampleBedFile(unittest.TestCase):
                     "mean_minus_std2",
                 ],
                 dtype={
-                    "chr": str,
-                    "start": int,
-                    "end": int,
+                    "chr": "category",
+                    "start": np.uint32,
+                    "end": np.uint32,
                     "sample_1": float,
                     "sample_2": float,
                     "sample_3": float,
@@ -561,9 +581,9 @@ class TestWriteSampleBedFile(unittest.TestCase):
                     "sample_1",
                 ],
                 dtype={
-                    "chr": str,
-                    "start": int,
-                    "end": int,
+                    "chr": "category",
+                    "start": np.uint32,
+                    "end": np.uint32,
                     "sample_1": float,
                     "mean": float,
                     "mean_plus_std": float,

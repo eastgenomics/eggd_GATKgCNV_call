@@ -10,6 +10,7 @@ Requires bgzip and tabix to be installed and on path.
 
 import argparse
 from concurrent.futures import as_completed, ProcessPoolExecutor
+import numpy as np
 from os import cpu_count
 from pathlib import Path
 import subprocess
@@ -101,7 +102,12 @@ def read_single_copy_ratio_file(copy_ratio_file) -> Tuple[str, pd.DataFrame]:
             comment="@",
             header=0,
             names=["chr", "start", "end", sample_name],
-            dtype={"chr": str, "start": int, "end": int, sample_name: float},
+            dtype={
+                "chr": "category",
+                "start": np.uint32,
+                "end": np.uint32,
+                sample_name: float,
+            },
             float_precision="high",
         )
     except Exception as exc:
