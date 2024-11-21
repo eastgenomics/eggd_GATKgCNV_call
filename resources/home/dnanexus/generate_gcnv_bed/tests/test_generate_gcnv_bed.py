@@ -150,7 +150,7 @@ class TestReadSingleCopyRatioFile(unittest.TestCase):
 
 class TestReadAllCopyRatioFiles(unittest.TestCase):
     def test_reading_all_files_to_dataframe_correct(self):
-        copy_ratio_files = glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+        copy_ratio_files = sorted(glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv"))
 
         copy_ratio_df = read_all_copy_ratio_files(
             copy_ratio_files=copy_ratio_files
@@ -215,7 +215,7 @@ class TestReadAllCopyRatioFiles(unittest.TestCase):
         ) as fh:
             fh.write("\n".join(sample_1_contents[:-2]))
 
-        copy_ratio_files = glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+        copy_ratio_files = sorted(glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv"))
         copy_ratio_files.append(diff_intervals_tsv)
 
         with self.subTest():
@@ -232,7 +232,7 @@ class TestCalculateMeanAndStdDev(unittest.TestCase):
 
     def setUp(self):
         self.copy_ratio_df = read_all_copy_ratio_files(
-            glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+            sorted(glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv"))
         )
         self.copy_ratio_df = calculate_mean_and_std_dev(
             copy_ratio_df=self.copy_ratio_df
@@ -333,7 +333,7 @@ class TestCalculateMeanAndStdDev(unittest.TestCase):
 class TestWriteRunLevelBedFile(unittest.TestCase):
     def setUp(self):
         self.copy_ratio_df = read_all_copy_ratio_files(
-            glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+            sorted(glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv"))
         )
         self.copy_ratio_df = calculate_mean_and_std_dev(
             copy_ratio_df=self.copy_ratio_df
