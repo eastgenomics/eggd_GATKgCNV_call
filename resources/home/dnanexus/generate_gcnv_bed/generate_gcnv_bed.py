@@ -53,9 +53,9 @@ def parse_args():
     args = parser.parse_args()
 
     # ensure interval list isn't accidentally passed as copy ratio file
-    args.copy_ratios = [
-        x for x in args.copy_ratios if "interval_list" not in x
-    ]
+    args.copy_ratios = sorted(
+        [x for x in args.copy_ratios if "interval_list" not in x]
+    )
 
     return args
 
