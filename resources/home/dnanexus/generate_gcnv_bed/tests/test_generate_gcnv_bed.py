@@ -406,7 +406,7 @@ class TestWriteRunLevelBedFile(unittest.TestCase):
 class TestWriteSampleBedFile(unittest.TestCase):
     def setUp(self):
         self.copy_ratio_df = read_all_copy_ratio_files(
-            glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv")
+            sorted(glob(f"{TEST_DATA_DIR}/*copy_ratios.tsv"))
         )
         self.copy_ratio_df = calculate_mean_and_std_dev(
             copy_ratio_df=self.copy_ratio_df
