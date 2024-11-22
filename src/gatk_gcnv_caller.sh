@@ -441,7 +441,7 @@ _call_generate_gcnv_bed() {
     keep_samples_arg=""
     if [[ "$keep_all_sample_traces" == "true" ]]; then keep_samples_arg="--keep_all_samples "; fi
 
-    python3 generate_gcnv_bed.py \
+    python3 generate_gcnv_bed/generate_gcnv_bed.py \
         --copy_ratios $denoised_copy_ratio_files \
         --per_sample $keep_samples_arg --run "$run_name"
 

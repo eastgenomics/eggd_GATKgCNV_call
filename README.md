@@ -1,4 +1,4 @@
-# GATK germline CNV caller (DNAnexus Platform App)
+# GATK Germline CNV Caller (DNAnexus Platform App)
 
 DNAnexus app to run the GATK GermlineCNVCaller and generate per sample gCNV.bed file for copy ratio visualisation and summarise CNV calls across samples on a run.
 This is the source code for an app that runs on the DNAnexus Platform.
