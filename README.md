@@ -34,6 +34,7 @@ Input files (preprocessed and annotated target intervals) come from the [GATKgCN
 * `-iDetermineGermlineContigPloidy_args` (`str`): optional command line arguments for DetermineGermlineContigPloidy
 * `-iGermlineCNVCaller_args` (`str`): optional command line arguments for GermlineCNVCaller
 * `-iPostprocessGermlineCNVCalls_args` (`str`): optional command line arguments for PostprocessGermlineCNVCalls
+* `-ikeep_all_sample_traces` (`bool`): controls whether to keep all sample traces in per sample visualisation bed files, if true all other samples will be anonymised grey traces
 * `-idebug_fail_start` (`bool`): automatically fail the job after inputs have been downloaded
 * `-idebug_fail_end` (`bool`): automatically fail the job after all commands have finished
 
@@ -44,7 +45,7 @@ Input files (preprocessed and annotated target intervals) come from the [GATKgCN
 * `{sample_name}_copy_ratios.gcnv.bed.gz`: bed file for copy ratio visualisation in igv.js
 * `{sample_name}_copy_ratios.gcnv.bed.gz.tbi`: index for the copy ratio bed file
 * `{run_name}_copy_ratios.gcnv.bed.gz`: bed file for the entire run copy ratio visualisation in igv.js
-* `{run_name}_copy_ratios.gcnv.bed.gz`: index for the run copy ratio bed file
+* `{run_name}_copy_ratios.gcnv.bed.gz.tbi`: index for the entire run copy ratio bed file
 * `{run_name}_excluded_intervals.bed`: list of intervals excluded from CNV calling for the run (0-based)
 
 

@@ -164,6 +164,14 @@
             "optional": true,
             "default": 1,
             "help": "number of CPU cores to allow per sample for PostProcessGermlineCNVCalls"
+        },
+        {
+            "name": "keep_all_sample_traces",
+            "label": "keep all sample traces",
+            "class": "boolean",
+            "optional": true,
+            "default": true,
+            "help": "controls whether to keep all samples traces as anonymised grey lines in the per sample visualisation bed file"
         }
     ],
     "outputSpec": [
