@@ -10,6 +10,7 @@ Requires bgzip and tabix to be installed and on path.
 
 import argparse
 from concurrent.futures import as_completed, ProcessPoolExecutor
+import numpy as np
 from os import cpu_count
 from pathlib import Path
 import subprocess
@@ -53,9 +54,9 @@ def parse_args():
     args = parser.parse_args()
 
     # ensure interval list isn't accidentally passed as copy ratio file
-    args.copy_ratios = [
-        x for x in args.copy_ratios if "interval_list" not in x
-    ]
+    args.copy_ratios = sorted(
+        [x for x in args.copy_ratios if "interval_list" not in x]
+    )
 
     return args
 
@@ -101,11 +102,21 @@ def read_single_copy_ratio_file(copy_ratio_file) -> Tuple[str, pd.DataFrame]:
             comment="@",
             header=0,
             names=["chr", "start", "end", sample_name],
+            dtype={
+                "chr": "category",
+                "start": np.uint32,
+                "end": np.uint32,
+                sample_name: float,
+            },
+            float_precision="high",
         )
-    except pd.errors.EmptyDataError:
+    except Exception as exc:
+        raise ValueError(
+            f"Error reading file {copy_ratio_file}: {str(exc)}"
+        ) from exc
+
+    if file_df.empty:
         raise ValueError(f"No data found in file: {copy_ratio_file}")
-    except Exception as e:
-        raise ValueError(f"Error reading file {copy_ratio_file}: {str(e)}")
 
     return sample_name, file_df
 
@@ -229,6 +240,8 @@ def write_run_level_bed_file(copy_ratio_df, prefix) -> None:
         name of run to prefix output file name with
     """
     outfile = f"{prefix}_copy_ratios.gcnv.bed"
+    print(f"Writing run level bed to {outfile}")
+    start = timer()
 
     with open(outfile, encoding="utf-8", mode="w") as fh:
         # this line is needed at the beginning to tell igv.js that it is
@@ -237,6 +250,8 @@ def write_run_level_bed_file(copy_ratio_df, prefix) -> None:
 
     copy_ratio_df.to_csv(outfile, sep="\t", header=True, index=False, mode="a")
     compress_and_index_bed_file(outfile)
+
+    print(f"Completed writing run bed in {round(timer() - start, 2)}s")
 
 
 def write_sample_bed_file(
@@ -291,7 +306,7 @@ def write_sample_bed_file(
         # by setting them to a blank space
         header = "\t".join(
             [
-                "⠀" if x not in minimum_columns else x
+                "." if x not in minimum_columns else x
                 for x in copy_ratio_df.columns.tolist()
             ]
         )
