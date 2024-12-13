@@ -300,6 +300,9 @@ _call_GATK_GermlineCNVCaller() {
     mark-section "Running GermlineCNVCaller for the calculated basecounts using the generated ploidy file"
     mkdir inputs/gCNV
 
+    # used to determine if our intervals have chr prefixes
+    chr_prefix=$(tail -n1 /home/dnanexus/inputs/beds/filtered.interval_list | grep -o 'chr')
+
     if [ "$scatter_by_chromosome" == "true" ]; then
         echo "Scattering intervals by chromosome"
 
@@ -314,12 +317,12 @@ _call_GATK_GermlineCNVCaller() {
             chr_ints=/home/dnanexus/inputs/scatter-dir/chr"$i"/scattered.interval_list
 
             # Skip chromosome if no intervals present
-            if [[ -z $(grep -P "^${i}\t" $ints | head -n1) ]]; then
+            if [[ -z $(grep -P "^${chr_prefix}${i}\t" $ints | head -n1) ]]; then
                 echo "No intervals found for Chromosome $i, skipping..."
             else
                 # Collect header & relevant lines for current chromosome
                 grep "^@" $ints > $chr_ints
-                grep -P "^${i}\t" $ints >> $chr_ints
+                grep -P "^${chr_prefix}${i}\t" $ints >> $chr_ints
             fi
         done
 
@@ -384,6 +387,9 @@ _call_GATKPostProcessGermlineCNVCalls() {
     local index
     index=$(expr $(find inputs/bams -type f -name '*.bam' | wc -l) - 1)
 
+    # used to determine if our intervals have chr prefixes
+    chr_prefix=$(tail -n1 /home/dnanexus/inputs/beds/filtered.interval_list | grep -o 'chr')
+
     # export if set to be available to sub shells in parallel
     if [[ -n "$PostprocessGermlineCNVCalls_args" ]]; then export "${PostprocessGermlineCNVCalls_args?}"; fi
 
@@ -399,8 +405,8 @@ _call_GATKPostProcessGermlineCNVCalls() {
         --sample-index {} \
         '"$PostprocessGermlineCNVCalls_args"' \
         --autosomal-ref-copy-number 2 \
-        --allosomal-contig X \
-        --allosomal-contig Y \
+        --allosomal-contig '"$chr_prefix"'X \
+        --allosomal-contig '"$chr_prefix"'Y \
         --contig-ploidy-calls /data/ploidy_dir/ploidy-calls \
         '"$batch_input_postprocess"' \
         --output-genotyped-intervals /data/vcfs/sample_{}_intervals.vcf \
