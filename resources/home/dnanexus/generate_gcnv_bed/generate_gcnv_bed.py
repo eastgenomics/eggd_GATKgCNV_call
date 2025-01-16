@@ -165,6 +165,10 @@ def read_all_copy_ratio_files(copy_ratio_files) -> pd.DataFrame:
 
         copy_ratio_df[sample] = sample_df[sample]
 
+    # Start coordinates are currently 1-based, need to be offset by 1
+    # to create a 0-based BED file for IGV visualisation
+    copy_ratio_df['start'] = copy_ratio_df['start'].apply(lambda x: x-1)
+    
     print(
         f"Completed reading {len(copy_ratio_files)} copy ratio "
         f"files in {round(timer() - start, 2)}s"
