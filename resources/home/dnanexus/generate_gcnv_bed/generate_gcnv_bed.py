@@ -174,9 +174,6 @@ def read_all_copy_ratio_files(copy_ratio_files) -> pd.DataFrame:
                 "chr": "category",
                 "start": np.uint32,
                 "end": np.uint32,
-                "sample_1": float,
-                "sample_2": float,
-                "sample_3": float,
             }
         )
 
