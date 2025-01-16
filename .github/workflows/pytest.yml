@@ -28,7 +28,7 @@ jobs:
         wget https://github.com/samtools/bcftools/releases/download/1.18/bcftools-1.18.tar.bz2
         tar xf bcftools-1.18.tar.bz2
         cd bcftools-1.18
-        ./configure --prefix=/usr/local/
+        ./configure --prefix=/usr/local/ --disable-bz2
         sudo make
         sudo make install
     - name: Build htslib
