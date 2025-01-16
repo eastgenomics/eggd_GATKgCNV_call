@@ -169,6 +169,17 @@ def read_all_copy_ratio_files(copy_ratio_files) -> pd.DataFrame:
     # to create a 0-based BED file for IGV visualisation
     copy_ratio_df['start'] = copy_ratio_df['start'].apply(lambda x: x-1)
 
+    copy_ratio_df = copy_ratio_df.astype(
+            {
+                "chr": "category",
+                "start": np.uint32,
+                "end": np.uint32,
+                "sample_1": float,
+                "sample_2": float,
+                "sample_3": float,
+            }
+        )
+
     print(
         f"Completed reading {len(copy_ratio_files)} copy ratio "
         f"files in {round(timer() - start, 2)}s"
