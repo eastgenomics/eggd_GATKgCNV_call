@@ -318,8 +318,8 @@ def write_sample_bed_file(
         # by setting them to a blank space
         header = "\t".join(
             [
-                "." if x not in minimum_columns else x
-                for x in copy_ratio_df.columns.tolist()
+                str(idx) if x not in minimum_columns else x
+                for idx, x in enumerate(copy_ratio_df.columns.tolist())
             ]
         )
 
